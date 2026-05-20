@@ -11,7 +11,7 @@ import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Step2Data } from '@/types/onboarding';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,14 +25,20 @@ export default function Step3BisScreen() {
   const insets = useSafeAreaInsets();
   const { width, h1, body, label } = useFontScale();
 
-  const step3 = useOnboardingStore((state) => state.step3);
   const setStep3Data = useOnboardingStore((state) => state.setStep3Data);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
 
-  const [file, setFile] = useState<Step2Data | null>(() => step3 ?? null);
+  const [file, setFile] = useState<Step2Data | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = useOnboardingStore.getState().step3;
+    if (saved) {
+      setFile(saved);
+    }
+  }, []);
 
   const handleNext = async () => {
     if (!file?.fileName) {

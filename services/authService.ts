@@ -1,8 +1,12 @@
+import { getResumeRoute } from '@lib/getResumeRoute';
+import { loadOnboardingMeta } from '@lib/onboardingMeta';
+import type { Href } from 'expo-router';
 import type { SendOtpResponse, User, VerifyOtpResponse } from '@/types/auth';
+import { useAuthStore } from '@store/useAuthStore';
 
 import { api, ApiError } from './api';
 
-const USE_MOCK = true; // set to false when real backend is ready
+export const USE_MOCK = true;
 
 const MOCK_TOKEN = 'mock-jwt-token-for-testing';
 const MOCK_OTP = '123456';
@@ -42,7 +46,7 @@ export async function sendOtp(countryCode: string, phone: string): Promise<SendO
     await delay(1000);
     return {
       success: true,
-      message: 'OTP sent successfully',
+      message: 'OTP sent',
       expiresIn: 45,
     };
   }
@@ -67,10 +71,25 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
     if (otp !== MOCK_OTP) {
       throw new ApiError('Invalid OTP. Please try again.');
     }
+
+    const authMode = useAuthStore.getState().authMode;
+    let onboardingStep = 1;
+    let isOnboardingComplete = false;
+
+    if (authMode === 'login') {
+      const existingMeta = await loadOnboardingMeta();
+      if (existingMeta) {
+        onboardingStep = existingMeta.currentOnboardingStep;
+        isOnboardingComplete = existingMeta.isOnboardingComplete;
+      }
+    }
+
     return {
       success: true,
       token: MOCK_TOKEN,
       user: buildMockUser(phone),
+      onboardingStep,
+      isOnboardingComplete,
     };
   }
 
@@ -88,12 +107,20 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
   }
 }
 
+/** Delegates to lib/getResumeRoute — single source of truth for navigation. */
+export function getResumeRouteForStep(
+  isOnboardingComplete: boolean,
+  onboardingStep: number,
+): Href {
+  return getResumeRoute(isOnboardingComplete, onboardingStep);
+}
+
 export async function resendOtp(phone: string): Promise<SendOtpResponse> {
   if (USE_MOCK) {
     await delay(500);
     return {
       success: true,
-      message: 'OTP resent successfully',
+      message: 'OTP sent',
       expiresIn: 45,
     };
   }

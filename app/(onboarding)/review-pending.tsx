@@ -1,0 +1,249 @@
+import { colors } from '@constants/colors';
+import { MIN_PRODUCTS_REQUIRED, REVIEW_TIMELINE_STEPS } from '@constants/products';
+import { useFontScale } from '@hooks/useFontScale';
+import { checkStoreStatus } from '@services/storeService';
+import { useOnboardingStore } from '@store/useOnboardingStore';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const POLL_INTERVAL_MS = 5000;
+
+type TimelineStepStatus = 'completed' | 'in_progress' | 'locked';
+
+type TimelineStepProps = {
+  title: string;
+  subtitle: string;
+  status: TimelineStepStatus;
+  isLast?: boolean;
+  iconSize: number;
+};
+
+function TimelineStep({
+  title,
+  subtitle,
+  status,
+  isLast = false,
+  iconSize,
+}: TimelineStepProps) {
+  const { body, micro } = useFontScale();
+
+  const circleColor =
+    status === 'completed'
+      ? colors.SUCCESS
+      : status === 'in_progress'
+        ? colors.NAVY
+        : colors.SURFACE_MUTED;
+
+  const iconName =
+    status === 'completed'
+      ? 'checkmark'
+      : status === 'in_progress'
+        ? 'hourglass-outline'
+        : 'lock-closed';
+
+  const titleColor = status === 'locked' ? colors.BODY_TEXT : colors.NAVY;
+
+  return (
+    <View className="flex-row">
+      <View className="items-center" style={{ width: iconSize + 8 }}>
+        <View
+          className="items-center justify-center rounded-full"
+          style={{
+            width: iconSize,
+            height: iconSize,
+            backgroundColor: circleColor,
+          }}
+        >
+          <Ionicons
+            name={iconName}
+            size={iconSize * 0.45}
+            color={status === 'locked' ? colors.BODY_TEXT : colors.WHITE}
+          />
+        </View>
+        {!isLast ? (
+          <View
+            className="flex-1"
+            style={{
+              width: 2,
+              minHeight: 36,
+              backgroundColor: colors.BORDER,
+              marginVertical: 4,
+            }}
+          />
+        ) : null}
+      </View>
+      <View className="flex-1 pb-5 pl-3">
+        <Text className="font-bold" style={{ fontSize: body, color: titleColor }}>
+          {title}
+        </Text>
+        <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function ReviewPendingScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width, h1, body, micro, button } = useFontScale();
+
+  const products = useOnboardingStore((state) => state.products);
+  const setStoreStatus = useOnboardingStore((state) => state.setStoreStatus);
+  const completeOnboarding = useOnboardingStore((state) => state.completeOnboarding);
+
+  const productCount = products.length;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isApprovedRef = useRef(false);
+
+  useEffect(() => {
+    const poll = async () => {
+      if (isApprovedRef.current) {
+        return;
+      }
+      try {
+        const response = await checkStoreStatus();
+        if (response.status === 'approved') {
+          isApprovedRef.current = true;
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setStoreStatus('approved');
+          completeOnboarding();
+          router.replace('/(onboarding)/store-live');
+        }
+      } catch {
+        // Keep polling on transient errors
+      }
+    };
+
+    void poll();
+    intervalRef.current = setInterval(() => {
+      void poll();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [router, setStoreStatus, completeOnboarding]);
+
+  return (
+    <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 12 }}>
+      <StatusBar style="dark" />
+      <ScrollView
+        className="flex-1 px-5"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          className="items-center justify-center overflow-hidden rounded-xl"
+          style={{
+            height: 220,
+            backgroundColor: colors.NAVY,
+          }}
+        >
+          <View
+            className="absolute inset-0"
+            style={{
+              backgroundColor: colors.GOLD,
+              opacity: 0.15,
+            }}
+          />
+          <Ionicons name="shield-checkmark" size={80} color={colors.GOLD} />
+        </View>
+
+        <Text
+          className="mt-6 text-center font-bold"
+          style={{ fontSize: h1, color: colors.NAVY }}
+        >
+          Your Store is Being Reviewed
+        </Text>
+        <Text
+          className="mt-3 text-center leading-relaxed"
+          style={{ fontSize: body, color: colors.BODY_TEXT }}
+        >
+          Our team is reviewing your business documents, branding, and product listings before
+          your jewelry store goes live.
+        </Text>
+
+        <View
+          className="mt-6 rounded-xl border p-4"
+          style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
+        >
+          {REVIEW_TIMELINE_STEPS.map((step) => (
+            <TimelineStep
+              key={step.id}
+              title={step.title}
+              subtitle={step.subtitle}
+              status="completed"
+              iconSize={width * 0.07}
+              isLast={false}
+            />
+          ))}
+          <TimelineStep
+            title={`Products Added (${productCount}/${MIN_PRODUCTS_REQUIRED})`}
+            subtitle="Inventory minimum met"
+            status="completed"
+            iconSize={width * 0.07}
+          />
+          <TimelineStep
+            title="Store Approval Pending"
+            subtitle="Current stage: Administrative review"
+            status="in_progress"
+            iconSize={width * 0.07}
+          />
+          <TimelineStep
+            title="Store Going Live After Approval"
+            subtitle=""
+            status="locked"
+            isLast
+            iconSize={width * 0.07}
+          />
+        </View>
+
+        <View
+          className="mt-5 flex-row items-center rounded-xl px-4 py-4"
+          style={{ backgroundColor: colors.SURFACE_MUTED }}
+        >
+          <Ionicons name="time-outline" size={width * 0.06} color={colors.NAVY} />
+          <View className="ml-3 flex-1">
+            <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+              Estimated Review Time
+            </Text>
+            <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+              Usually within 12–24 hours
+            </Text>
+          </View>
+        </View>
+
+        <View className="mt-5 flex-row items-center justify-center">
+          <Ionicons name="notifications-outline" size={width * 0.045} color={colors.BODY_TEXT} />
+          <Text className="ml-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+            You&apos;ll receive a notification once your store is approved.
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => router.push('/(onboarding)/step5-products')}
+          className="mt-6 items-center justify-center rounded-xl border py-4"
+          style={{ borderColor: colors.NAVY }}
+        >
+          <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
+            Edit Products
+          </Text>
+        </Pressable>
+
+        <Text className="mt-6 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+          Your store will remain hidden from customers until approved.
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}

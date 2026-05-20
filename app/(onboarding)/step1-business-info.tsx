@@ -13,23 +13,32 @@ import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { ApiError } from '@services/api';
 import { submitBusinessInfo } from '@services/onboardingService';
+import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { formatPhoneDisplay } from '@utils/formatPhone';
 import { zodResolver } from '@hookform/resolvers/zod';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 const step1Schema = z.object({
   businessName: z.string().min(1, 'Business name is required').min(3, 'Minimum 3 characters'),
   ownerName: z.string().min(1, 'Owner name is required').min(2, 'Minimum 2 characters'),
-  contactNumber: z
-    .string()
-    .min(1, 'Contact number is required')
-    .regex(/^\d{10}$/, 'Enter a valid 10-digit number'),
   businessAddress: z
     .string()
     .min(1, 'Business address is required')
@@ -38,44 +47,116 @@ const step1Schema = z.object({
 
 type Step1FormValues = z.infer<typeof step1Schema>;
 
+type GeocodeResponse = {
+  results?: Array<{ formatted_address: string }>;
+};
+
 export default function Step1BusinessInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, h1, body, label } = useFontScale();
-  const savedStep1 = useOnboardingStore((state) => state.step1);
   const setStep1Data = useOnboardingStore((state) => state.setStep1Data);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
+  const phoneNumber = useAuthStore((state) => state.phoneNumber);
+  const countryCode = useAuthStore((state) => state.countryCode);
+  const authUser = useAuthStore((state) => state.user);
+
+  const verifiedContactNumber =
+    phoneNumber?.replace(/\D/g, '').slice(-10) ??
+    authUser?.phone.replace(/\D/g, '').slice(-10) ??
+    '';
+
+  const verifiedPhoneDisplay = verifiedContactNumber
+    ? formatPhoneDisplay(countryCode ?? '+91', verifiedContactNumber)
+    : '';
 
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
   const {
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<Step1FormValues>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
-      businessName: savedStep1?.businessName ?? '',
-      ownerName: savedStep1?.ownerName ?? '',
-      contactNumber: savedStep1?.contactNumber ?? '',
-      businessAddress: savedStep1?.businessAddress ?? '',
+      businessName: '',
+      ownerName: '',
+      businessAddress: '',
     },
   });
 
   useEffect(() => {
-    if (savedStep1) {
-      reset(savedStep1);
+    const saved = useOnboardingStore.getState().step1;
+    if (saved) {
+      reset({
+        businessName: saved.businessName,
+        ownerName: saved.ownerName,
+        businessAddress: saved.businessAddress,
+      });
     }
-  }, [savedStep1, reset]);
+  }, [reset]);
+
+  const handleUseCurrentLocation = async () => {
+    setIsFetchingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location permission denied',
+          'Please enter address manually.',
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync();
+      const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+      if (!mapsKey) {
+        Alert.alert(
+          'Google Maps API key not configured',
+          'Please enter address manually.',
+        );
+        return;
+      }
+
+      const { latitude, longitude } = position.coords;
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${mapsKey}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        Alert.alert('Could not fetch location', 'Please enter manually.');
+        return;
+      }
+
+      const data = (await response.json()) as GeocodeResponse;
+      const formattedAddress = data.results?.[0]?.formatted_address;
+      if (!formattedAddress) {
+        Alert.alert('Could not fetch location', 'Please enter manually.');
+        return;
+      }
+
+      setValue('businessAddress', formattedAddress, { shouldValidate: true });
+    } catch {
+      Alert.alert('Could not fetch location', 'Please enter manually.');
+    } finally {
+      setIsFetchingLocation(false);
+    }
+  };
 
   const onSubmit = async (values: Step1FormValues) => {
     setApiError(null);
     setIsSubmitting(true);
     try {
-      await submitBusinessInfo(values);
-      setStep1Data(values);
+      const payload = {
+        businessName: values.businessName,
+        ownerName: values.ownerName,
+        contactNumber: verifiedContactNumber,
+        businessAddress: values.businessAddress,
+      };
+      await submitBusinessInfo(payload);
+      setStep1Data(payload);
       router.push('/(onboarding)/step2-gst');
     } catch (error) {
       const message =
@@ -87,37 +168,44 @@ export default function Step1BusinessInfoScreen() {
   };
 
   return (
-    <View
-      className="flex-1 bg-white px-5"
-      style={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }}
-    >
+    <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />
-      <OnboardingScreenHeader
-        title="Onboarding"
-        onBack={() => router.replace('/(auth)/login')}
-      />
+      <View className="px-5">
+        <OnboardingScreenHeader
+          title="Onboarding"
+          onBack={() => router.replace('/(auth)/login')}
+        />
 
-      <View className="mb-3 flex-row items-start justify-between">
-        <View className="flex-1 pr-2">
-          <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
-            Step 1: Business Info
-          </Text>
-          <Text className="mt-1" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-            Tell us about your jewelry business
-          </Text>
+        <View className="mb-3 flex-row items-start justify-between">
+          <View className="flex-1 pr-2">
+            <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
+              Step 1: Business Info
+            </Text>
+            <Text className="mt-1" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+              Tell us about your jewelry business
+            </Text>
+          </View>
+          <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>1 of 5</Text>
         </View>
-        <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>1 of 5</Text>
+
+        <StepProgressBar
+          currentStep={1}
+          totalSteps={5}
+          percentLabel="20% Complete"
+          showStepLabels={false}
+        />
       </View>
 
-      <StepProgressBar
-        currentStep={1}
-        totalSteps={5}
-        percentLabel="20% Complete"
-        showStepLabels={false}
-      />
-
-      <View className="mt-4 flex-1 justify-between">
-        <View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom: 120 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Controller
             control={control}
             name="businessName"
@@ -148,39 +236,63 @@ export default function Step1BusinessInfoScreen() {
               />
             )}
           />
-          <Controller
-            control={control}
-            name="contactNumber"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <FormTextField
-                label="Contact Number"
-                icon={<PhoneIcon />}
-                placeholder="+91 6290887334"
-                keyboardType="phone-pad"
-                maxLength={10}
-                value={value}
-                onChangeText={(text) => onChange(text.replace(/\D/g, '').slice(0, 10))}
-                onBlur={onBlur}
-                error={errors.contactNumber?.message}
-              />
-            )}
-          />
+          <View>
+            <FormTextField
+              label="Contact Number"
+              icon={<PhoneIcon />}
+              placeholder={verifiedPhoneDisplay || '+91 00000 00000'}
+              value={verifiedPhoneDisplay}
+              editable={false}
+              style={{
+                backgroundColor: colors.SURFACE_MUTED,
+                color: colors.BODY_TEXT,
+              }}
+            />
+            <View className="mt-1 flex-row items-center">
+              <Ionicons name="checkmark-circle" size={16} color={colors.SUCCESS} />
+              <Text className="ml-1" style={{ fontSize: label, color: colors.SUCCESS }}>
+                Mobile number verified via OTP
+              </Text>
+            </View>
+          </View>
           <Controller
             control={control}
             name="businessAddress"
             render={({ field: { onChange, onBlur, value } }) => (
-              <FormTextField
-                label="Business Address"
-                icon={<LocationIcon />}
-                placeholder="Full street address, City, Country"
-                multiline
-                numberOfLines={3}
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                error={errors.businessAddress?.message}
-                style={{ minHeight: width * 0.2 }}
-              />
+              <View>
+                <FormTextField
+                  label="Business Address"
+                  icon={<LocationIcon />}
+                  placeholder="Full street address, City, Country"
+                  multiline
+                  numberOfLines={3}
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.businessAddress?.message}
+                  style={{ minHeight: width * 0.2 }}
+                />
+                <View className="mt-1 flex-row items-center justify-end">
+                  {isFetchingLocation ? (
+                    <ActivityIndicator size="small" color={colors.NAVY} style={{ marginRight: 8 }} />
+                  ) : null}
+                  <Pressable
+                    onPress={() => void handleUseCurrentLocation()}
+                    disabled={isFetchingLocation}
+                    hitSlop={8}
+                  >
+                    <Text
+                      style={{
+                        fontSize: label,
+                        color: isFetchingLocation ? colors.BODY_TEXT : colors.NAVY,
+                        fontWeight: '600',
+                      }}
+                    >
+                      📍 Use Current Location
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
             )}
           />
 
@@ -200,9 +312,9 @@ export default function Step1BusinessInfoScreen() {
               verification purposes.
             </Text>
           </View>
-        </View>
+        </ScrollView>
 
-        <View>
+        <View className="border-t bg-white px-5 pt-3" style={{ borderColor: colors.BORDER, paddingBottom: insets.bottom + 12 }}>
           <PrimaryButton
             label="Next Step"
             showArrow
@@ -216,7 +328,7 @@ export default function Step1BusinessInfoScreen() {
           ) : null}
           <Pressable
             className="mt-4 items-center"
-            onPress={() => router.replace('/(auth)/login')}
+            onPress={() => router.replace({ pathname: '/(auth)/login', params: { mode: 'login' } })}
           >
             <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>
               Already have an account?{' '}
@@ -226,7 +338,7 @@ export default function Step1BusinessInfoScreen() {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

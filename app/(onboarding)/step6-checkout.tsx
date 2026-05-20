@@ -80,7 +80,7 @@ export default function Step6CheckoutScreen() {
       return;
     }
     const timer = setTimeout(() => {
-      router.replace('/(app)/dashboard');
+      router.replace('/(onboarding)/step5-products');
     }, 1500);
     return () => clearTimeout(timer);
   }, [paymentSuccess, router]);

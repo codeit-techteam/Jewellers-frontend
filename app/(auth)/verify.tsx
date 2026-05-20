@@ -5,6 +5,7 @@ import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { ApiError } from '@services/api';
+import { getResumeRoute } from '@lib/getResumeRoute';
 import { resendOtp, verifyOtp } from '@services/authService';
 import { useAuthStore } from '@store/useAuthStore';
 import { formatPhoneDisplay, formatTimerValue } from '@utils/formatPhone';
@@ -125,8 +126,17 @@ export default function VerifyScreen() {
     setIsVerifying(true);
     try {
       const response = await verifyOtp(phoneNumber, code);
-      await setAuthSuccess(response.token, response.user);
-      router.replace('/(app)/dashboard');
+      await setAuthSuccess(
+        response.token,
+        response.user,
+        response.onboardingStep,
+        response.isOnboardingComplete,
+      );
+      const resumeRoute = getResumeRoute(
+        response.isOnboardingComplete,
+        response.onboardingStep,
+      );
+      router.replace(resumeRoute);
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : 'Invalid OTP. Please try again.';

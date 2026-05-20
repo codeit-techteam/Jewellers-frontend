@@ -19,6 +19,8 @@ export type VerifyOtpResponse = {
   success: boolean;
   token: string;
   user: User;
+  onboardingStep: number;
+  isOnboardingComplete: boolean;
 };
 
 export type CountryOption = {

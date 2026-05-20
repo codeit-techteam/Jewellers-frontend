@@ -19,6 +19,7 @@ export type Step3Data = {
 
 export type Step4Data = {
   logoUri: string | null;
+  coverImageUri: string | null;
   tagline: string;
 };
 

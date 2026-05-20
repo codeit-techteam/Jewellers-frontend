@@ -5,36 +5,34 @@ import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { ApiError } from '@services/api';
-import { USE_MOCK, uploadGSTCertificate } from '@services/onboardingService';
+import { uploadGSTCertificate } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Step2Data } from '@/types/onboarding';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const MOCK_GST_FILE: Step2Data = {
-  fileUri: '',
-  fileName: 'GST_REG_06_Final.pdf',
-  fileSize: '1.2 MB',
-};
 
 export default function Step2GstScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { h1, body, label } = useFontScale();
 
-  const step2 = useOnboardingStore((state) => state.step2);
   const setStep2Data = useOnboardingStore((state) => state.setStep2Data);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
 
-  const [file, setFile] = useState<Step2Data | null>(
-    () => step2 ?? (USE_MOCK ? MOCK_GST_FILE : null),
-  );
+  const [file, setFile] = useState<Step2Data | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = useOnboardingStore.getState().step2;
+    if (saved) {
+      setFile(saved);
+    }
+  }, []);
 
   const handleNext = async () => {
     if (!file?.fileName) {

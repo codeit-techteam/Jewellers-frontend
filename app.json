@@ -41,7 +41,14 @@
           "photosPermission": "Allow Jewellars Partner to access your photos for document upload.",
           "cameraPermission": "Allow Jewellars Partner to use the camera for document capture."
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow GehnaHub to access your location to auto-fill address."
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

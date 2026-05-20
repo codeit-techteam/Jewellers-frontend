@@ -1,18 +1,33 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@store/useAuthStore';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ImageBackground, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Ring-only photo — not the full UI mockup (onboarding-bg.png)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const onboardingBackground = require('@assets/images/onboarding-bg.png') as number;
+const onboardingBackground = require('@assets/images/onboarding-ring-bg.jpg') as number;
 
 export default function OnboardingScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const markWelcomeSeen = useAuthStore((state) => state.markWelcomeSeen);
+
+  const handleGetStarted = () => {
+    void markWelcomeSeen().then(() => {
+      router.push({ pathname: '/(auth)/login', params: { mode: 'register' } });
+    });
+  };
+
+  const handleLogin = () => {
+    void markWelcomeSeen().then(() => {
+      router.push({ pathname: '/(auth)/login', params: { mode: 'login' } });
+    });
+  };
 
   return (
     <>
@@ -22,7 +37,28 @@ export default function OnboardingScreen() {
         resizeMode="cover"
         style={{ flex: 1, width: '100%', height: '100%' }}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(10, 5, 0, 0.25)' }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: height * 0.35,
+              backgroundColor: 'rgba(0,0,0,0.3)',
+            }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: height * 0.4,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+            }}
+          />
+
           <View style={{ flex: 1, paddingHorizontal: 24 }}>
             <Animated.View
               entering={FadeInDown.delay(100).duration(700)}
@@ -32,7 +68,19 @@ export default function OnboardingScreen() {
                 paddingTop: 48 + insets.top,
               }}
             >
-              <View style={{ alignSelf: 'center' }}>
+              <View
+                style={{
+                  alignSelf: 'center',
+                  borderWidth: 1.5,
+                  borderColor: 'rgba(201, 168, 76, 0.6)',
+                  borderRadius: 37,
+                  shadowColor: '#C9A84C',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 12,
+                  elevation: 8,
+                }}
+              >
                 <DiamondIcon
                   containerColor="#1B2B4B"
                   color="#FFFFFF"
@@ -41,26 +89,38 @@ export default function OnboardingScreen() {
                 />
               </View>
 
-              <Text
-                style={{
-                  fontWeight: '800',
-                  letterSpacing: 8,
-                  color: '#FFFFFF',
-                  fontSize: width * 0.13,
-                  textAlign: 'center',
-                  marginTop: 16,
-                }}
-              >
-                GEHNAHUB
-              </Text>
+              <View style={{ width: '100%', paddingHorizontal: 8, marginTop: 16 }}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.65}
+                  style={{
+                    fontWeight: '800',
+                    letterSpacing: 4,
+                    color: '#FFFFFF',
+                    fontSize: width * 0.095,
+                    textAlign: 'center',
+                    textShadowColor: 'rgba(0,0,0,0.5)',
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 4,
+                  }}
+                >
+                  GEHNAHUB
+                </Text>
+              </View>
 
               <View
                 style={{
-                  width: 80,
+                  width: 60,
                   height: 1.5,
                   backgroundColor: '#C9A84C',
                   alignSelf: 'center',
                   marginTop: 8,
+                  shadowColor: '#C9A84C',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.8,
+                  shadowRadius: 6,
+                  elevation: 4,
                 }}
               />
 
@@ -87,7 +147,8 @@ export default function OnboardingScreen() {
               <View
                 style={{
                   borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.4)',
+                  borderColor: 'rgba(201, 168, 76, 0.5)',
+                  backgroundColor: 'rgba(201, 168, 76, 0.08)',
                   borderRadius: 20,
                   paddingVertical: 6,
                   paddingHorizontal: 16,
@@ -96,7 +157,7 @@ export default function OnboardingScreen() {
               >
                 <Text
                   style={{
-                    color: '#FFFFFF',
+                    color: 'rgba(255, 255, 255, 0.95)',
                     fontSize: width * 0.028,
                     letterSpacing: 2,
                     textAlign: 'center',
@@ -108,11 +169,14 @@ export default function OnboardingScreen() {
 
               <Text
                 style={{
-                  fontSize: width * 0.072,
+                  fontSize: width * 0.068,
                   fontWeight: '700',
                   color: '#FFFFFF',
                   textAlign: 'center',
                   marginTop: 12,
+                  textShadowColor: 'rgba(0,0,0,0.5)',
+                  textShadowOffset: { width: 0, height: 2 },
+                  textShadowRadius: 4,
                 }}
               >
                 Grow Your{'\n'}Jewellery Business
@@ -139,14 +203,17 @@ export default function OnboardingScreen() {
               }}
             >
               <Pressable
-                onPress={() =>
-                  router.push({ pathname: '/(auth)/login', params: { mode: 'register' } })
-                }
+                onPress={handleGetStarted}
                 style={{
                   backgroundColor: '#1B2B4B',
                   borderRadius: 14,
                   paddingVertical: 16,
                   width: '100%',
+                  shadowColor: '#1B2B4B',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 8,
+                  elevation: 6,
                 }}
               >
                 <Text
@@ -162,9 +229,7 @@ export default function OnboardingScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() =>
-                  router.push({ pathname: '/(auth)/login', params: { mode: 'login' } })
-                }
+                onPress={handleLogin}
                 style={{
                   backgroundColor: 'rgba(255,255,255,0.10)',
                   borderWidth: 1,

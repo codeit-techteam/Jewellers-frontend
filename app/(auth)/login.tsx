@@ -39,6 +39,7 @@ export default function LoginScreen() {
   const { height, width, h1, h2, body, label, micro } = useFontScale();
   const params = useLocalSearchParams<{ mode?: string }>();
   const setPhoneForOtp = useAuthStore((state) => state.setPhoneForOtp);
+  const setAuthFlowMode = useAuthStore((state) => state.setAuthFlowMode);
 
   const [selectedCountry, setSelectedCountry] = useState<CountryOption>(DEFAULT_COUNTRY);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -62,6 +63,7 @@ export default function LoginScreen() {
     setApiError(null);
     setIsSubmitting(true);
     try {
+      setAuthFlowMode(isRegisterMode ? 'register' : 'login');
       await sendOtp(selectedCountry.dial, values.phone);
       setPhoneForOtp(values.phone, selectedCountry.dial);
       router.push('/(auth)/verify');
@@ -173,18 +175,6 @@ export default function LoginScreen() {
                 {apiError}
               </Text>
             ) : null}
-
-            <Pressable
-              className="mt-6 items-center"
-              onPress={() => router.push('/(onboarding)/step1-business-info')}
-            >
-              <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>
-                New Jeweller?{' '}
-                <Text className="font-bold" style={{ color: colors.NAVY }}>
-                  Register here
-                </Text>
-              </Text>
-            </Pressable>
 
             <View className="mt-6 flex-row items-center justify-center" style={{ gap: width * 0.08 }}>
               <View className="flex-row items-center">
