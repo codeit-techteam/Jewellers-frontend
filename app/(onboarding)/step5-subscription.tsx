@@ -2,27 +2,19 @@ import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenH
 import { PlanCard } from '@components/subscription/PlanCard';
 import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { ShieldCheckIcon } from '@components/ui/OnboardingIcons';
-import { SUBSCRIPTION_PLANS, getPlanById } from '@constants/subscriptionPlans';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
+import { chooseSubscription, getStatus } from '@services/onboardingService';
+import { handleApiError } from '@utils/handleApiError';
+import { getPlans } from '@services/paymentService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import type { PlanId, Step5Data } from '@/types/payment';
+import type { Plan } from '@/types/payment';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-function buildStep5Data(planId: PlanId): Step5Data {
-  const plan = getPlanById(planId);
-  return {
-    planId: plan.id,
-    planName: plan.name,
-    price: plan.checkoutPrice,
-    billingCycle: plan.billingCycle,
-  };
-}
 
 export default function Step5SubscriptionScreen() {
   const router = useRouter();
@@ -31,31 +23,94 @@ export default function Step5SubscriptionScreen() {
   const { h1, body, label, micro } = useFontScale();
 
   const setStep5Data = useOnboardingStore((state) => state.setStep5Data);
-  const [selectedPlanId, setSelectedPlanId] = useState<PlanId>('pro');
+  const setOnboardingStep = useOnboardingStore((state) => state.setOnboardingStep);
+
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    const saved = useOnboardingStore.getState().step5;
-    if (saved?.planId) {
-      setSelectedPlanId(saved.planId);
-    }
-  }, []);
+    const savedPlanId = useOnboardingStore.getState().step5?.planId ?? '';
 
-  const isFreeSelected = selectedPlanId === 'free';
-  const canUpgrade = !isFreeSelected;
+    async function init() {
+      // Guard: if the user already completed subscription (step >= 6), skip straight to products.
+      try {
+        const status = await getStatus();
+        if (status.onboardingStep >= 6) {
+          router.replace('/(onboarding)/step5-products');
+          return;
+        }
+      } catch {
+        // Status check failed — continue to show plans so the user isn't stuck.
+      }
 
-  const handleUpgradeNow = () => {
-    if (!canUpgrade) {
-      return;
+      try {
+        const fetched = await getPlans();
+        setPlans(fetched);
+        // Restore previously selected plan or default to the second plan (Pro tier)
+        const defaultId =
+          savedPlanId && fetched.some((p) => p.id === savedPlanId)
+            ? savedPlanId
+            : fetched[1]?.id ?? fetched[0]?.id ?? '';
+        setSelectedPlanId(defaultId);
+      } catch (err) {
+        setPlansError(handleApiError(err));
+      } finally {
+        setIsLoadingPlans(false);
+      }
     }
-    const data = buildStep5Data(selectedPlanId);
-    setStep5Data(data);
-    router.push('/(onboarding)/step6-checkout');
+
+    void init();
+  }, [router]);
+
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
+  const isFreeSelected = (selectedPlan?.monthlyPrice ?? -1) === 0;
+  const canUpgrade = !isFreeSelected && Boolean(selectedPlan);
+
+  const handleFreeComplete = async () => {
+    if (!selectedPlan) return;
+    setApiError(null);
+    setIsProcessing(true);
+    try {
+      const response = await chooseSubscription(selectedPlan.id, 'monthly');
+      setStep5Data({
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        price: 0,
+        billingCycle: 'monthly',
+      });
+      // Persist the server-confirmed onboarding step (should be 6) locally
+      setOnboardingStep(response.onboardingStep ?? 6);
+      router.replace('/(onboarding)/step5-products');
+    } catch (error) {
+      setApiError(handleApiError(error));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleFreeComplete = () => {
-    const data = buildStep5Data('free');
-    setStep5Data(data);
-    router.replace('/(onboarding)/step5-products');
+  const handleUpgradeNow = async () => {
+    if (!selectedPlan || isFreeSelected) return;
+    setApiError(null);
+    setIsProcessing(true);
+    try {
+      const response = await chooseSubscription(selectedPlan.id, selectedPlan.billingCycle);
+      setStep5Data({
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        price: response.amount ?? selectedPlan.checkoutPrice,
+        billingCycle: selectedPlan.billingCycle,
+        subscriptionId: response.subscriptionId,
+      });
+      router.push('/(onboarding)/step6-checkout');
+    } catch (error) {
+      setApiError(handleApiError(error));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -84,16 +139,24 @@ export default function Step5SubscriptionScreen() {
         </Text>
 
         <View className="mt-6">
-          {SUBSCRIPTION_PLANS.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              isSelected={selectedPlanId === plan.id}
-              onSelect={setSelectedPlanId}
-              onFreeCurrentPlan={handleFreeComplete}
-              isFreeLoading={false}
-            />
-          ))}
+          {isLoadingPlans ? (
+            <ActivityIndicator size="large" color={colors.NAVY} style={{ marginVertical: 40 }} />
+          ) : plansError ? (
+            <Text className="text-center" style={{ fontSize: body, color: colors.ERROR }}>
+              {plansError}
+            </Text>
+          ) : (
+            plans.map((plan) => (
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                isSelected={selectedPlanId === plan.id}
+                onSelect={setSelectedPlanId}
+                onFreeCurrentPlan={() => void handleFreeComplete()}
+                isFreeLoading={isProcessing && isFreeSelected}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -129,11 +192,18 @@ export default function Step5SubscriptionScreen() {
           </View>
         </View>
 
+        {apiError ? (
+          <Text className="mb-2 text-center" style={{ fontSize: label, color: colors.ERROR }}>
+            {apiError}
+          </Text>
+        ) : null}
+
         <PrimaryButton
           label="Upgrade Now"
           showArrow
-          onPress={handleUpgradeNow}
-          disabled={!canUpgrade}
+          onPress={() => void handleUpgradeNow()}
+          disabled={!canUpgrade || isProcessing || isLoadingPlans}
+          isLoading={isProcessing && !isFreeSelected}
         />
       </View>
     </View>

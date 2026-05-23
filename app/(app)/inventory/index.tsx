@@ -1,125 +1,34 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
-import { INVENTORY_DRAFTS_FILTER, INVENTORY_FILTER_CATEGORIES } from '@constants/inventory';
+import { INVENTORY_DRAFTS_FILTER } from '@constants/inventory';
+import { useCategories } from '@hooks/useCategories';
+import { formatCategoryName } from '@utils/categoryLabel';
+import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
+import { getProducts, removeProductApi } from '@services/inventoryService';
 import { useInventoryStore } from '@store/useInventoryStore';
 import type { InventoryProduct } from '@/types/inventory';
 import { formatInr } from '@utils/formatCurrency';
 import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const FILTER_CATEGORIES = [...INVENTORY_FILTER_CATEGORIES, INVENTORY_DRAFTS_FILTER];
-
-function displayOrDash(value: string | number | undefined): string {
-  if (value === undefined || value === null) {
-    return '—';
-  }
-  if (typeof value === 'string' && value.trim() === '') {
-    return '—';
-  }
-  if (typeof value === 'number' && value === 0) {
-    return '—';
-  }
-  return String(value);
-}
-
-function DraftCard({
-  product,
-  width,
-  body,
-  label,
-  onComplete,
-  onDelete,
-}: {
-  product: InventoryProduct;
-  width: number;
-  body: number;
-  label: number;
-  onComplete: () => void;
-  onDelete: () => void;
-}) {
-  const priceLabel =
-    product.price > 0 ? formatInr(product.price) : displayOrDash(product.price || undefined);
-
-  return (
-    <View
-      className="mb-3 rounded-xl border p-3"
-      style={{
-        borderColor: colors.BORDER,
-        backgroundColor: colors.WHITE,
-        borderLeftWidth: 4,
-        borderLeftColor: colors.GOLD,
-      }}
-    >
-      <View className="absolute right-3 top-3 rounded-full px-2 py-0.5" style={{ backgroundColor: colors.TIP_BG }}>
-        <Text className="font-bold" style={{ fontSize: width * 0.024, color: colors.GOLD }}>
-          DRAFT
-        </Text>
-      </View>
-
-      <View className="flex-row pr-16">
-        {product.imageUri ? (
-          <Image
-            source={{ uri: product.imageUri }}
-            style={{ width: 64, height: 64, borderRadius: 8 }}
-            resizeMode="cover"
-          />
-        ) : (
-          <View
-            className="items-center justify-center rounded-lg"
-            style={{ width: 64, height: 64, backgroundColor: colors.SURFACE_MUTED }}
-          >
-            <DiamondIcon size={width * 0.05} containerSize={40} containerColor={colors.SURFACE_MUTED} color={colors.BODY_TEXT} />
-          </View>
-        )}
-        <View className="ml-3 flex-1">
-          <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }} numberOfLines={1}>
-            {displayOrDash(product.name)}
-          </Text>
-          <Text style={{ fontSize: width * 0.028, color: colors.BODY_TEXT }}>
-            {displayOrDash(product.category)}
-          </Text>
-          <Text className="mt-1 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
-            {priceLabel}
-          </Text>
-        </View>
-      </View>
-
-      <View className="mt-3 flex-row items-center">
-        <Pressable
-          onPress={onComplete}
-          className="flex-1 items-center justify-center rounded-lg py-2"
-          style={{ backgroundColor: colors.NAVY }}
-        >
-          <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
-            Complete
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={onDelete}
-          className="ml-2 flex-1 items-center justify-center rounded-lg border py-2"
-          style={{ borderColor: colors.ERROR }}
-        >
-          <Text className="font-semibold" style={{ fontSize: label, color: colors.ERROR }}>
-            Delete
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
 
 function ProductCard({
   product,
@@ -127,6 +36,7 @@ function ProductCard({
   body,
   label,
   micro,
+  onPress,
   onRemove,
   onEdit,
 }: {
@@ -135,6 +45,7 @@ function ProductCard({
   body: number;
   label: number;
   micro: number;
+  onPress: () => void;
   onRemove: () => void;
   onEdit: () => void;
 }) {
@@ -148,6 +59,7 @@ function ProductCard({
       className="mb-3 rounded-xl border p-3"
       style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
     >
+      <Pressable onPress={onPress}>
       <View className="flex-row">
         {product.imageUri ? (
           <Image
@@ -225,6 +137,7 @@ function ProductCard({
       <Text className="mt-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
         Making Charges: {makingLabel}
       </Text>
+      </Pressable>
 
       <View className="mt-3 flex-row items-center">
         <Pressable
@@ -252,6 +165,7 @@ function ProductCard({
 
 export default function InventoryScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -261,58 +175,97 @@ export default function InventoryScreen() {
   const label = width * 0.032;
   const micro = width * 0.028;
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const products = useInventoryStore((state) => state.products);
   const selectedCategory = useInventoryStore((state) => state.selectedCategory);
   const setCategory = useInventoryStore((state) => state.setCategory);
+  const setProducts = useInventoryStore((state) => state.setProducts);
   const removeProduct = useInventoryStore((state) => state.removeProduct);
 
-  const draftProducts = useMemo(() => products.filter((product) => product.isDraft), [products]);
+  const { data: categories = [] } = useCategories();
+  const filterChips = useMemo(
+    () => [
+      { id: 'All', label: 'All' },
+      ...categories.map((c) => ({ id: c.id, label: formatCategoryName(c.name) })),
+    ],
+    [categories],
+  );
+
+  const {
+    isPending,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = useQuery({
+    queryKey: inventoryQueryKeys.all,
+    queryFn: async () => {
+      const data = await getProducts();
+      setProducts(data);
+      return data;
+    },
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
+
+  useEffect(() => {
+    if (selectedCategory === INVENTORY_DRAFTS_FILTER) {
+      setCategory('All');
+    }
+  }, [selectedCategory, setCategory]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === INVENTORY_DRAFTS_FILTER) {
-      return draftProducts;
-    }
-    return products.filter(
+    let list = products.filter(
       (product) => !product.isDraft && matchesCategoryFilter(product, selectedCategory),
     );
-  }, [products, selectedCategory, draftProducts]);
-
-  const showDraftsSection =
-    draftProducts.length > 0 &&
-    selectedCategory !== INVENTORY_DRAFTS_FILTER &&
-    selectedCategory === 'All';
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q),
+    );
+  }, [products, selectedCategory, searchQuery]);
 
   const handleRemove = (product: InventoryProduct) => {
-    Alert.alert(
+    void dialog.confirm(
       'Remove product',
       `Remove ${product.name || 'this product'}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeProduct(product.id),
+      {
+        destructive: true,
+        confirmText: 'Remove',
+        onConfirm: async () => {
+          try {
+            await removeProductApi(product.id);
+            removeProduct(product.id);
+            void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
+          } catch (err) {
+            void dialog.alert('Error', handleApiError(err));
+            return;
+          }
+          void refetch();
         },
-      ],
+      },
     );
   };
 
-  const handleDeleteDraft = (product: InventoryProduct) => {
-    Alert.alert(
-      'Delete draft',
-      `Delete draft "${product.name || 'Untitled'}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => removeProduct(product.id),
-        },
-      ],
-    );
-  };
+  const listTitle = 'My Products';
 
-  const listTitle = selectedCategory === INVENTORY_DRAFTS_FILTER ? 'Draft Products' : 'Inventory Insights';
+  if (isPending && products.length === 0) {
+    return <LoadingScreen message="Loading inventory…" />;
+  }
+
+  if (isError && products.length === 0) {
+    return (
+      <ErrorScreen message={handleApiError(error)} onRetry={() => void refetch()} />
+    );
+  }
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
@@ -322,7 +275,28 @@ export default function InventoryScreen() {
         <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
           Inventory
         </Text>
-        <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>My Products engagement</Text>
+        <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>Manage your product catalogue</Text>
+
+        <View
+          className="mt-4 flex-row items-center rounded-xl border px-3"
+          style={{ borderColor: colors.BORDER, backgroundColor: colors.SURFACE_MUTED }}
+        >
+          <Ionicons name="search-outline" size={20} color={colors.BODY_TEXT} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search by name, SKU, or category"
+            placeholderTextColor={colors.BODY_TEXT}
+            className="ml-2 flex-1 py-3"
+            style={{ fontSize: body, color: colors.NAVY }}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={20} color={colors.BODY_TEXT} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <View style={{ flexGrow: 0, marginTop: 16 }}>
@@ -337,12 +311,12 @@ export default function InventoryScreen() {
             gap: 8,
           }}
         >
-          {FILTER_CATEGORIES.map((category) => {
-            const isActive = category === selectedCategory;
+          {filterChips.map((chip) => {
+            const isActive = chip.id === selectedCategory;
             return (
               <Pressable
-                key={category}
-                onPress={() => setCategory(category)}
+                key={chip.id}
+                onPress={() => setCategory(chip.id)}
                 style={{
                   backgroundColor: isActive ? colors.NAVY : colors.WHITE,
                   borderWidth: isActive ? 0 : 1,
@@ -359,7 +333,7 @@ export default function InventoryScreen() {
                     fontWeight: isActive ? '600' : '400',
                   }}
                 >
-                  {category}
+                  {chip.label}
                 </Text>
               </Pressable>
             );
@@ -372,47 +346,32 @@ export default function InventoryScreen() {
         className="px-5 pt-4"
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching && !isPending}
+            onRefresh={() => void refetch()}
+            tintColor={colors.NAVY}
+          />
+        }
       >
-        {showDraftsSection ? (
-          <View className="mb-4">
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
-                Drafts
-              </Text>
-              <Text style={{ fontSize: micro, color: colors.GOLD }}>
-                {draftProducts.length} incomplete
-              </Text>
-            </View>
-            {draftProducts.map((product) => (
-              <DraftCard
-                key={product.id}
-                product={product}
-                width={width}
-                body={body}
-                label={label}
-                onComplete={() =>
-                  router.push({
-                    pathname: '/(app)/inventory/add',
-                    params: { productId: product.id },
-                  })
-                }
-                onDelete={() => handleDeleteDraft(product)}
-              />
-            ))}
-          </View>
-        ) : null}
-
         <Text className="mb-3 font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
           {listTitle}
         </Text>
 
+        {isPending && products.length > 0 ? (
+          <View className="items-center py-4">
+            <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>Refreshing…</Text>
+          </View>
+        ) : null}
         {filteredProducts.length === 0 ? (
           <View className="items-center py-12">
             <Ionicons name="diamond-outline" size={48} color={colors.BODY_TEXT} />
-            <Text className="mt-3" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-              {selectedCategory === INVENTORY_DRAFTS_FILTER
-                ? 'No draft products yet'
-                : `No products in ${selectedCategory}`}
+            <Text className="mt-3 text-center" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+              {searchQuery.trim()
+                ? 'No products match your search'
+                : selectedCategory === 'All'
+                  ? 'No products yet — add your first piece'
+                  : 'No products in this category'}
             </Text>
             <Pressable
               onPress={() => router.push('/(app)/inventory/add')}
@@ -424,23 +383,6 @@ export default function InventoryScreen() {
               </Text>
             </Pressable>
           </View>
-        ) : selectedCategory === INVENTORY_DRAFTS_FILTER ? (
-          filteredProducts.map((product) => (
-            <DraftCard
-              key={product.id}
-              product={product}
-              width={width}
-              body={body}
-              label={label}
-              onComplete={() =>
-                router.push({
-                  pathname: '/(app)/inventory/add',
-                  params: { productId: product.id },
-                })
-              }
-              onDelete={() => handleDeleteDraft(product)}
-            />
-          ))
         ) : (
           filteredProducts.map((product) => (
             <ProductCard
@@ -450,6 +392,12 @@ export default function InventoryScreen() {
               body={body}
               label={label}
               micro={micro}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/product-detail',
+                  params: { productId: product.id, returnTo: '/(app)/inventory' },
+                })
+              }
               onRemove={() => handleRemove(product)}
               onEdit={() =>
                 router.push({

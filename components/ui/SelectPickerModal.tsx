@@ -1,14 +1,25 @@
 import { colors } from '@constants/colors';
 import { Modal, Pressable, ScrollView, Text, useWindowDimensions } from 'react-native';
 
+export type SelectOption = {
+  value: string;
+  label: string;
+};
+
 type SelectPickerModalProps = {
   visible: boolean;
   title: string;
-  options: readonly string[];
+  options: readonly string[] | readonly SelectOption[];
   selectedValue: string;
   onSelect: (value: string) => void;
   onClose: () => void;
 };
+
+function normalizeOptions(options: readonly string[] | readonly SelectOption[]): SelectOption[] {
+  return options.map((option) =>
+    typeof option === 'string' ? { value: option, label: option } : option,
+  );
+}
 
 export function SelectPickerModal({
   visible,
@@ -20,6 +31,7 @@ export function SelectPickerModal({
 }: SelectPickerModalProps) {
   const { width } = useWindowDimensions();
   const body = width * 0.038;
+  const normalized = normalizeOptions(options);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -32,19 +44,19 @@ export function SelectPickerModal({
             {title}
           </Text>
           <ScrollView className="max-h-80">
-            {options.map((option) => {
-              const isSelected = option === selectedValue;
+            {normalized.map((option) => {
+              const isSelected = option.value === selectedValue;
               return (
                 <Pressable
-                  key={option}
+                  key={option.value}
                   onPress={() => {
-                    onSelect(option);
+                    onSelect(option.value);
                     onClose();
                   }}
                   className="rounded-xl px-3 py-3"
                   style={{ backgroundColor: isSelected ? colors.INFO_BG : undefined }}
                 >
-                  <Text style={{ fontSize: body, color: colors.NAVY }}>{option}</Text>
+                  <Text style={{ fontSize: body, color: colors.NAVY }}>{option.label}</Text>
                 </Pressable>
               );
             })}

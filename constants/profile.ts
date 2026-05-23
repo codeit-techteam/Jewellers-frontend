@@ -17,6 +17,7 @@ export function createInitialProfile(): BusinessProfile {
     address: step1?.businessAddress ?? '12/A Zaveri Bazaar, Mumbai, MH',
     taxId: 'TX-9827341',
     logoUri: step4?.logoUri ?? null,
+    coverUri: step4?.coverImageUri ?? null,
     memberId: 'JW-86293',
     isVerified: true,
     plan: step5?.planName ?? 'Free',

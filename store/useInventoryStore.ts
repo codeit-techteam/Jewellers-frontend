@@ -1,4 +1,3 @@
-import { INITIAL_MOCK_INVENTORY_PRODUCTS } from '@constants/inventory';
 import { trackEvent } from '@services/inventoryService';
 import type { InventoryProduct, InventoryTrackEvent } from '@/types/inventory';
 import { create } from 'zustand';
@@ -7,6 +6,7 @@ type InventoryStoreState = {
   products: InventoryProduct[];
   isLoading: boolean;
   selectedCategory: string;
+  setProducts: (products: InventoryProduct[]) => void;
   addProduct: (product: InventoryProduct) => void;
   removeProduct: (id: string) => void;
   updateProduct: (id: string, data: Partial<InventoryProduct>) => void;
@@ -16,7 +16,7 @@ type InventoryStoreState = {
   incrementInquiry: (id: string) => void;
   incrementWaClick: (id: string) => void;
   setLoading: (loading: boolean) => void;
-  resetToInitial: () => void;
+  clearProducts: () => void;
 };
 
 const incrementAnalytics = (
@@ -36,14 +36,16 @@ const incrementAnalytics = (
       : product,
   );
 
-const trackAnalyticsEvent = (id: string, event: InventoryTrackEvent): void => {
-  void trackEvent(id, event);
+const fireTrack = (id: string, event: InventoryTrackEvent): void => {
+  trackEvent(id, event);
 };
 
 export const useInventoryStore = create<InventoryStoreState>((set) => ({
-  products: INITIAL_MOCK_INVENTORY_PRODUCTS,
+  products: [],
   isLoading: false,
   selectedCategory: 'All',
+
+  setProducts: (products) => set({ products }),
 
   addProduct: (product) =>
     set((state) => ({
@@ -68,38 +70,33 @@ export const useInventoryStore = create<InventoryStoreState>((set) => ({
     set((state) => ({
       products: incrementAnalytics(state.products, id, 'views'),
     }));
-    trackAnalyticsEvent(id, 'view');
+    fireTrack(id, 'view');
   },
 
   incrementWishlist: (id) => {
     set((state) => ({
       products: incrementAnalytics(state.products, id, 'wishlist'),
     }));
-    trackAnalyticsEvent(id, 'wishlist');
+    fireTrack(id, 'wishlist');
   },
 
   incrementInquiry: (id) => {
     set((state) => ({
       products: incrementAnalytics(state.products, id, 'inquiry'),
     }));
-    trackAnalyticsEvent(id, 'inquiry');
+    fireTrack(id, 'inquiry');
   },
 
   incrementWaClick: (id) => {
     set((state) => ({
       products: incrementAnalytics(state.products, id, 'waClicks'),
     }));
-    trackAnalyticsEvent(id, 'wa_click');
+    fireTrack(id, 'wa_click');
   },
 
   setLoading: (loading) => set({ isLoading: loading }),
 
-  resetToInitial: () =>
-    set({
-      products: INITIAL_MOCK_INVENTORY_PRODUCTS,
-      isLoading: false,
-      selectedCategory: 'All',
-    }),
+  clearProducts: () => set({ products: [], isLoading: false }),
 }));
 
 export function getTotalViews(products: InventoryProduct[]): number {

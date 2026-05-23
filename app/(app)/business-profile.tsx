@@ -2,10 +2,10 @@ import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { pickImageFromLibrary } from '@components/ui/DocumentUploader';
 import { colors } from '@constants/colors';
 import { PROFILE_TAGLINE } from '@constants/profile';
-import { updateBusinessProfile } from '@services/profileService';
-import { useOnboardingStore } from '@store/useOnboardingStore';
+import { getStore, updateLogo, updateStore } from '@services/storeService';
 import { useProfileStore } from '@store/useProfileStore';
 import { businessProfileSchema, type BusinessProfileFormValues } from '@utils/businessProfileFormSchema';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { navigateBack } from '@lib/navigateBack';
@@ -64,13 +64,12 @@ export default function BusinessProfileScreen() {
 
   const profile = useProfileStore((state) => state.profile);
   const updateProfile = useProfileStore((state) => state.updateProfile);
-  const syncFromOnboarding = useProfileStore((state) => state.syncFromOnboarding);
-  const setStep1Data = useOnboardingStore((state) => state.setStep1Data);
-  const setStep4Data = useOnboardingStore((state) => state.setStep4Data);
+  const applyStoreProfile = useProfileStore((state) => state.applyStoreProfile);
   const setIsLoading = useProfileStore((state) => state.setLoading);
   const isLoading = useProfileStore((state) => state.isLoading);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const {
     control,
@@ -89,61 +88,64 @@ export default function BusinessProfileScreen() {
   });
 
   useEffect(() => {
-    syncFromOnboarding();
-  }, [syncFromOnboarding]);
-
-  useEffect(() => {
-    reset({
-      businessName: profile.businessName,
-      ownerName: profile.ownerName,
-      phone: profile.phone.replace(/^\+91\s?/, ''),
-      address: profile.address,
-      taxId: profile.taxId,
-    });
-  }, [profile, reset]);
+    void (async () => {
+      setIsLoading(true);
+      try {
+        const store = await getStore();
+        applyStoreProfile(store);
+        reset({
+          businessName: store.businessName,
+          ownerName: store.ownerName,
+          phone: store.phone.replace(/^\+91\s?/, '').replace(/\D/g, '').slice(-10),
+          address: store.address,
+          taxId: store.documents.find((d) => d.type === 'gst')?.licenseNo ?? profile.taxId,
+        });
+      } catch (err) {
+        setLoadError(handleApiError(err));
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogoPick = async () => {
     const picked = await pickImageFromLibrary();
     if (picked?.fileUri) {
-      updateProfile({ logoUri: picked.fileUri });
-      const step4 = useOnboardingStore.getState().step4;
-      setStep4Data({
-        logoUri: picked.fileUri,
-        coverImageUri: step4?.coverImageUri ?? null,
-        tagline: step4?.tagline ?? '',
-      });
+      try {
+        const logoUrl = await updateLogo(picked.fileUri);
+        updateProfile({ logoUri: logoUrl });
+      } catch (err) {
+        setLoadError(handleApiError(err));
+      }
     }
   };
 
   const onSubmit = async (values: BusinessProfileFormValues) => {
     setIsSaving(true);
-    setIsLoading(true);
+    setLoadError(null);
     try {
-      const phoneFormatted = values.phone.startsWith('+')
-        ? values.phone
-        : `+91 ${values.phone.replace(/\D/g, '')}`;
-
-      const payload = {
-        businessName: values.businessName.trim(),
-        ownerName: values.ownerName.trim(),
-        phone: phoneFormatted,
+      const phoneDigits = values.phone.replace(/\D/g, '').slice(-10);
+      const store = await updateStore({
+        name: values.businessName.trim(),
         address: values.address.trim(),
+        phoneNumber: phoneDigits,
+        whatsappNumber: phoneDigits,
+      });
+      applyStoreProfile(store);
+      updateProfile({
+        businessName: store.businessName,
+        ownerName: store.ownerName,
+        phone: store.phone,
+        address: store.address,
         taxId: values.taxId.trim(),
-        logoUri: profile.logoUri,
-      };
-
-      await updateBusinessProfile(payload);
-      updateProfile(payload);
-      setStep1Data({
-        businessName: payload.businessName,
-        ownerName: payload.ownerName,
-        contactNumber: values.phone.replace(/\D/g, '').slice(-10),
-        businessAddress: payload.address,
+        logoUri: store.logoUrl,
       });
       navigateBack(router, returnTo);
+    } catch (err) {
+      setLoadError(handleApiError(err));
     } finally {
       setIsSaving(false);
-      setIsLoading(false);
     }
   };
 
@@ -165,9 +167,14 @@ export default function BusinessProfileScreen() {
       </View>
 
       <KeyboardAvoidingView
-        className="flex-1"
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        {loadError ? (
+          <Text className="px-5 pb-2" style={{ fontSize: micro, color: colors.ERROR }}>
+            {loadError}
+          </Text>
+        ) : null}
         <ScrollView
           className="flex-1 px-5"
           contentContainerStyle={{ paddingBottom: 120 }}

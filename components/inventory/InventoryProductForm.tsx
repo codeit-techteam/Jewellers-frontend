@@ -1,14 +1,18 @@
 import { SelectPickerModal } from '@components/ui/SelectPickerModal';
 import { pickImageFromLibrary } from '@components/ui/DocumentUploader';
 import { colors } from '@constants/colors';
-import {
-  DEFAULT_PURITY,
-  INVENTORY_FORM_CATEGORIES,
-  PURITY_OPTIONS,
-} from '@constants/inventory';
+import { DEFAULT_PURITY, PURITY_OPTIONS } from '@constants/inventory';
+import { useCategories } from '@hooks/useCategories';
+import type { SelectOption } from '@components/ui/SelectPickerModal';
+import { formatCategoryName } from '@utils/categoryLabel';
 import type { InventoryProduct } from '@/types/inventory';
-import { inventoryProductDraftSchema, inventoryProductStrictSchema } from '@utils/inventoryFormSchema';
+import {
+  inventoryProductDraftSchema,
+  inventoryProductEditSchema,
+  inventoryProductStrictSchema,
+} from '@utils/inventoryFormSchema';
 import { calculateProductPrice, generateProductSku } from '@utils/calculateProductPrice';
+import { dialog } from '@utils/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
@@ -39,7 +43,7 @@ type InventoryProductFormProps = {
 
 type FormValues = {
   name: string;
-  category: string;
+  categoryId: string;
   weight: string;
   purity: string;
   makingChargesType: 'percentage' | 'flat';
@@ -49,7 +53,7 @@ type FormValues = {
 
 const defaultValues: FormValues = {
   name: '',
-  category: '',
+  categoryId: '',
   weight: '',
   purity: DEFAULT_PURITY,
   makingChargesType: 'percentage',
@@ -78,6 +82,11 @@ export function InventoryProductForm({
         ? [initialProduct.imageUri]
         : [],
   );
+  const { data: categories = [], isLoading: isLoadingCategories } = useCategories();
+  const categoryOptions: SelectOption[] = categories.map((c) => ({
+    value: c.id,
+    label: formatCategoryName(c.name),
+  }));
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [purityModalVisible, setPurityModalVisible] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
@@ -89,13 +98,16 @@ export function InventoryProductForm({
     watch,
     formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(inventoryProductStrictSchema),
+    resolver: zodResolver(
+      mode === 'edit' ? inventoryProductEditSchema : inventoryProductStrictSchema,
+    ),
     defaultValues: initialProduct
       ? {
           name: initialProduct.name,
-          category: initialProduct.category,
-          weight: String(initialProduct.weight),
-          purity: initialProduct.purity,
+          categoryId: initialProduct.categoryId,
+          weight:
+            initialProduct.weight > 0 ? String(initialProduct.weight) : '',
+          purity: initialProduct.purity || DEFAULT_PURITY,
           makingChargesType: initialProduct.makingChargesType,
           makingChargesValue: String(initialProduct.makingChargesValue),
           additionalDetails: initialProduct.additionalDetails ?? '',
@@ -105,7 +117,9 @@ export function InventoryProductForm({
   });
 
   const makingChargesType = watch('makingChargesType');
-  const selectedCategory = watch('category');
+  const selectedCategoryId = watch('categoryId');
+  const selectedCategoryLabel =
+    categoryOptions.find((c) => c.value === selectedCategoryId)?.label ?? '';
 
   const detailsAnimatedStyle = useAnimatedStyle(() => ({
     opacity: detailsHeight.value,
@@ -120,12 +134,17 @@ export function InventoryProductForm({
 
   const handleAddImage = async () => {
     if (imageUris.length >= 5) {
+      void dialog.alert('Limit reached', 'You can upload up to 5 images per product.');
       return;
     }
     const picked = await pickImageFromLibrary();
     if (picked?.fileUri) {
       setImageUris((prev) => [...prev, picked.fileUri]);
     }
+  };
+
+  const handleRemoveImage = (uri: string) => {
+    setImageUris((prev) => prev.filter((item) => item !== uri));
   };
 
   const buildProduct = (values: FormValues, isDraft: boolean): InventoryProduct => {
@@ -135,11 +154,15 @@ export function InventoryProductForm({
       ? 0
       : calculateProductPrice(weight, values.makingChargesType, makingChargesValue);
 
+    const categoryName =
+      categories.find((c) => c.id === values.categoryId)?.name ?? selectedCategoryLabel;
+
     return {
       id: initialProduct?.id ?? `inv-${Date.now()}`,
       name: values.name.trim(),
-      sku: initialProduct?.sku ?? generateProductSku(values.category || 'OT'),
-      category: values.category || 'Other',
+      sku: initialProduct?.sku ?? generateProductSku(categoryName || 'PR'),
+      categoryId: values.categoryId,
+      category: categoryName || '—',
       price: initialProduct?.price && mode === 'edit' ? initialProduct.price : price,
       weight,
       purity: values.purity,
@@ -170,6 +193,7 @@ export function InventoryProductForm({
 
   const onSaveProduct = handleSubmit((values: FormValues) => {
     if (imageUris.length === 0) {
+      void dialog.alert('Image required', 'Add at least one product photo before saving.');
       return;
     }
     const product = buildProduct(values, false);
@@ -192,7 +216,7 @@ export function InventoryProductForm({
 
   return (
     <KeyboardAvoidingView
-      className="flex-1"
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
@@ -234,11 +258,18 @@ export function InventoryProductForm({
           {imageUris.length > 0 ? (
             <View className="mt-4 flex-row flex-wrap justify-center" style={{ gap: 8 }}>
               {imageUris.map((uri) => (
-                <Image
-                  key={uri}
-                  source={{ uri }}
-                  style={{ width: 64, height: 64, borderRadius: 8 }}
-                />
+                <Pressable key={uri} onPress={() => handleRemoveImage(uri)} className="relative">
+                  <Image
+                    source={{ uri }}
+                    style={{ width: 64, height: 64, borderRadius: 8 }}
+                  />
+                  <View
+                    className="absolute -right-1 -top-1 items-center justify-center rounded-full"
+                    style={{ width: 20, height: 20, backgroundColor: colors.ERROR }}
+                  >
+                    <Ionicons name="close" size={12} color={colors.WHITE} />
+                  </View>
+                </Pressable>
               ))}
             </View>
           ) : null}
@@ -275,32 +306,38 @@ export function InventoryProductForm({
         </Text>
         <Controller
           control={control}
-          name="category"
+          name="categoryId"
           render={({ field: { onChange, value } }) => (
             <>
               <Pressable
-                onPress={() => setCategoryModalVisible(true)}
+                onPress={() => {
+                  if (!isLoadingCategories && categoryOptions.length > 0) {
+                    setCategoryModalVisible(true);
+                  }
+                }}
                 className="flex-row items-center justify-between rounded-xl border px-4 py-3"
-                style={{ borderColor: errors.category ? colors.ERROR : colors.BORDER }}
+                style={{ borderColor: errors.categoryId ? colors.ERROR : colors.BORDER }}
               >
                 <Text style={{ fontSize: body, color: value ? colors.NAVY : colors.BODY_TEXT }}>
-                  {value || 'Select Category'}
+                  {isLoadingCategories
+                    ? 'Loading categories…'
+                    : selectedCategoryLabel || 'Select Category'}
                 </Text>
                 <Ionicons name="chevron-down" size={width * 0.04} color={colors.BODY_TEXT} />
               </Pressable>
               <SelectPickerModal
                 visible={categoryModalVisible}
                 title="Select category"
-                options={INVENTORY_FORM_CATEGORIES}
-                selectedValue={selectedCategory}
+                options={categoryOptions}
+                selectedValue={value}
                 onSelect={onChange}
                 onClose={() => setCategoryModalVisible(false)}
               />
             </>
           )}
         />
-        {errors.category ? (
-          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.category.message}</Text>
+        {errors.categoryId ? (
+          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.categoryId.message}</Text>
         ) : null}
 
         <View className="mt-3 flex-row" style={{ gap: width * 0.03 }}>

@@ -1,20 +1,26 @@
 import { StorefrontProductCard } from '@components/storefront/StorefrontProductCard';
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
+import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
+import { getProducts } from '@services/inventoryService';
 import { useInventoryStore } from '@store/useInventoryStore';
 import {
   buildStorefrontInventoryProducts,
   type StorefrontDisplayProduct,
 } from '@utils/buildStorefrontInventoryProducts';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
+import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo } from 'react';
-import { Alert, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function isTrackableInventoryId(id: string): boolean {
-  return id.startsWith('inv-') || id.startsWith('draft-');
+function isTrackableProductId(id: string): boolean {
+  return !id.startsWith('mock-');
 }
 
 export default function AllProductsScreen() {
@@ -27,18 +33,26 @@ export default function AllProductsScreen() {
   const label = width * 0.032;
   const productNameSize = width * 0.036;
 
-  const inventoryProducts = useInventoryStore((state) => state.products);
+  const setProducts = useInventoryStore((state) => state.setProducts);
   const incrementView = useInventoryStore((state) => state.incrementView);
 
+  const productsQuery = useQuery({
+    queryKey: inventoryQueryKeys.all,
+    queryFn: async () => {
+      const data = await getProducts({ status: 'active', is_draft: false });
+      setProducts(data);
+      return data;
+    },
+  });
+
   const displayProducts = useMemo(
-    () => buildStorefrontInventoryProducts(inventoryProducts),
-    [inventoryProducts],
+    () => buildStorefrontInventoryProducts(productsQuery.data ?? []),
+    [productsQuery.data],
   );
 
   const handleViewDetails = useCallback(
     (product: StorefrontDisplayProduct) => {
-      if (!isTrackableInventoryId(product.id)) {
-        Alert.alert('Preview product', 'Add this product to your inventory to view full details.');
+      if (!isTrackableProductId(product.id)) {
         return;
       }
       incrementView(product.id);
@@ -52,6 +66,19 @@ export default function AllProductsScreen() {
     },
     [incrementView, returnTo, router],
   );
+
+  if (productsQuery.isPending && !productsQuery.data) {
+    return <LoadingScreen message="Loading products…" />;
+  }
+
+  if (productsQuery.isError && !productsQuery.data) {
+    return (
+      <ErrorScreen
+        message={handleApiError(productsQuery.error)}
+        onRetry={() => void productsQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
@@ -78,18 +105,23 @@ export default function AllProductsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="flex-row flex-wrap justify-between">
-          {displayProducts.map((product) => (
+        {displayProducts.length === 0 ? (
+          <View className="items-center py-16">
+            <Ionicons name="diamond-outline" size={48} color={colors.BODY_TEXT} />
+            <Text className="mt-3" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+              No active products yet
+            </Text>
+          </View>
+        ) : (
+          displayProducts.map((product) => (
             <StorefrontProductCard
               key={product.id}
               product={product}
-              width={width}
-              nameSize={productNameSize}
-              label={label}
+              productNameSize={productNameSize}
               onViewDetails={() => handleViewDetails(product)}
             />
-          ))}
-        </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );

@@ -1,118 +1,31 @@
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
+import {
+  getNotifications,
+  markAllRead,
+  markRead,
+} from '@services/notificationsService';
+import type { AppNotification } from '@/types/notifications';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps } from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { dialog } from '@utils/dialog';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type NotificationType = 'lead' | 'order' | 'system';
-
 type NotificationFilter = 'All' | 'Orders' | 'Leads' | 'System';
-
-type AppNotification = {
-  id: string;
-  type: NotificationType;
-  title: string;
-  body: string;
-  time: string;
-  isRead: boolean;
-  icon: ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-};
-
-const INITIAL_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'n1',
-    type: 'lead',
-    title: 'New Appointment Booked',
-    body: 'Amit Sharma booked a consultation for Diamond Ring',
-    time: '2 hours ago',
-    isRead: false,
-    icon: 'calendar-outline',
-    iconColor: colors.NAVY,
-  },
-  {
-    id: 'n2',
-    type: 'lead',
-    title: 'Lead Status Updated',
-    body: 'Priya Gupta has been marked as Followed Up',
-    time: '5 hours ago',
-    isRead: false,
-    icon: 'person-outline',
-    iconColor: colors.NAVY,
-  },
-  {
-    id: 'n3',
-    type: 'order',
-    title: 'New Product Inquiry',
-    body: 'Someone enquired about Temple Gold Necklace',
-    time: 'Yesterday',
-    isRead: true,
-    icon: 'chatbubble-outline',
-    iconColor: colors.SUCCESS,
-  },
-  {
-    id: 'n4',
-    type: 'system',
-    title: 'Store Verified Successfully',
-    body: 'Your jewelry store has been approved and is now live',
-    time: '2 days ago',
-    isRead: true,
-    icon: 'shield-checkmark-outline',
-    iconColor: colors.SUCCESS,
-  },
-  {
-    id: 'n5',
-    type: 'system',
-    title: 'BIS License Expiring Soon',
-    body: 'Your BIS license expires in 14 days. Please renew.',
-    time: '3 days ago',
-    isRead: true,
-    icon: 'warning-outline',
-    iconColor: colors.AMBER,
-  },
-  {
-    id: 'n6',
-    type: 'lead',
-    title: 'WhatsApp Enquiry Received',
-    body: 'A customer clicked WhatsApp on Filigree Gold Bangles',
-    time: '4 days ago',
-    isRead: true,
-    icon: 'logo-whatsapp',
-    iconColor: colors.WHATSAPP,
-  },
-  {
-    id: 'n7',
-    type: 'order',
-    title: 'Product View Milestone',
-    body: 'Solitaire Diamond Ring crossed 2000 views',
-    time: '5 days ago',
-    isRead: true,
-    icon: 'eye-outline',
-    iconColor: colors.NAVY,
-  },
-  {
-    id: 'n8',
-    type: 'system',
-    title: 'Subscription Renewal Reminder',
-    body: 'Your Pro plan renews on Oct 12, 2024',
-    time: '1 week ago',
-    isRead: true,
-    icon: 'card-outline',
-    iconColor: colors.NAVY,
-  },
-];
 
 const FILTER_PILLS: NotificationFilter[] = ['All', 'Orders', 'Leads', 'System'];
 
-function filterTypeForPill(pill: NotificationFilter): NotificationType | null {
+function filterTypeForPill(pill: NotificationFilter): string | undefined {
   if (pill === 'Orders') return 'order';
   if (pill === 'Leads') return 'lead';
-  if (pill === 'System') return 'system';
-  return null;
+  return undefined;
 }
 
 type NotificationRowProps = {
@@ -206,6 +119,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const queryClient = useQueryClient();
 
   const h2 = width * 0.048;
   const body = width * 0.038;
@@ -213,30 +127,45 @@ export default function NotificationsScreen() {
   const micro = width * 0.028;
 
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('All');
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
 
-  const filteredNotifications = useMemo(() => {
-    const typeFilter = filterTypeForPill(activeFilter);
-    if (!typeFilter) {
-      return notifications;
-    }
-    return notifications.filter((item) => item.type === typeFilter);
-  }, [activeFilter, notifications]);
+  const apiType = filterTypeForPill(activeFilter);
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
+  const { data, isPending, isError, error, refetch } = useQuery({
+    queryKey: ['notifications', activeFilter],
+    queryFn: () => getNotifications(apiType),
+  });
+
+  const notifications = data?.notifications ?? [];
+  const filteredNotifications =
+    activeFilter === 'System'
+      ? notifications.filter((item) => item.type === 'system')
+      : notifications;
+
+  const handleMarkAllRead = () => {
+    void (async () => {
+      try {
+        await markAllRead();
+        await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      } catch (err) {
+        void dialog.alert('Error', handleApiError(err));
+      }
+    })();
   };
 
-  const toggleRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)),
-    );
+  const handleToggleRead = (id: string) => {
+    void (async () => {
+      try {
+        await markRead(id);
+        await refetch();
+      } catch (err) {
+        void dialog.alert('Error', handleApiError(err));
+      }
+    })();
   };
 
   const deleteNotification = (id: string) => {
     swipeableRefs.current.get(id)?.close();
-    setNotifications((prev) => prev.filter((item) => item.id !== id));
     swipeableRefs.current.delete(id);
   };
 
@@ -317,14 +246,23 @@ export default function NotificationsScreen() {
         <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>
           {filteredNotifications.length} notification
           {filteredNotifications.length === 1 ? '' : 's'}
+          {data?.unreadCount ? ` · ${data.unreadCount} unread` : ''}
         </Text>
-        <Pressable onPress={markAllRead} hitSlop={8}>
+        <Pressable onPress={handleMarkAllRead} hitSlop={8}>
           <Text className="font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
             Mark all as read
           </Text>
         </Pressable>
       </View>
 
+      {isPending && !data ? (
+        <LoadingScreen message="Loading notifications…" />
+      ) : isError && !data ? (
+        <ErrorScreen
+          message={handleApiError(error)}
+          onRetry={() => void refetch()}
+        />
+      ) : (
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
@@ -345,7 +283,7 @@ export default function NotificationsScreen() {
               body={body}
               label={label}
               micro={micro}
-              onPress={() => toggleRead(item.id)}
+              onPress={() => handleToggleRead(item.id)}
               onDelete={() => deleteNotification(item.id)}
               onSwipeOpen={() => closeOtherSwipeables(item.id)}
               swipeableRef={(ref) => {
@@ -359,6 +297,7 @@ export default function NotificationsScreen() {
           ))
         )}
       </ScrollView>
+      )}
     </View>
   );
 }

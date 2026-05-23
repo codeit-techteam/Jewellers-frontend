@@ -4,7 +4,7 @@ import { PrimaryButton } from '@components/ui/PrimaryButton';
 /* eslint-disable react-hooks/immutability -- Reanimated shared values */
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
+import { handleApiError } from '@utils/handleApiError';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { resendOtp, verifyOtp } from '@services/authService';
 import { useAuthStore } from '@store/useAuthStore';
@@ -138,9 +138,7 @@ export default function VerifyScreen() {
       );
       router.replace(resumeRoute);
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Invalid OTP. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
       setHasError(true);
       triggerShake();
     } finally {
@@ -161,9 +159,7 @@ export default function VerifyScreen() {
       setResetKey((k) => k + 1);
       startTimer();
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to resend OTP. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsResending(false);
     }

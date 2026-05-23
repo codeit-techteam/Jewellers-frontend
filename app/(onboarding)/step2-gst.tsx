@@ -4,7 +4,7 @@ import { StepNavButtons } from '@components/ui/StepNavButtons';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
+import { handleApiError } from '@utils/handleApiError';
 import { uploadGSTCertificate } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Step2Data } from '@/types/onboarding';
@@ -44,13 +44,11 @@ export default function Step2GstScreen() {
     setApiError(null);
     setIsSubmitting(true);
     try {
-      await uploadGSTCertificate(file.fileUri);
+      await uploadGSTCertificate(file.fileUri, file.fileName);
       setStep2Data(file);
       router.push('/(onboarding)/step3-bis');
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Upload failed. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsSubmitting(false);
     }

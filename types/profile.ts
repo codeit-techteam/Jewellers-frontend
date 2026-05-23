@@ -19,6 +19,7 @@ export type BusinessProfile = {
   address: string;
   taxId: string;
   logoUri: string | null;
+  coverUri: string | null;
   memberId: string;
   isVerified: boolean;
   plan: string;

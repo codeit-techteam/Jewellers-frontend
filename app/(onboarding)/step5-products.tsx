@@ -6,23 +6,27 @@ import {
   PRODUCT_UPLOAD_BENEFITS,
 } from '@constants/products';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
-import { saveDraft, submitProducts } from '@services/productService';
+import { handleApiError } from '@utils/handleApiError';
+import { submitForReview } from '@services/onboardingService';
+import { getProducts, removeProductApi, saveSimpleProduct } from '@services/inventoryService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import type { Product, ProductCategory } from '@/types/product';
-import { PRODUCT_CATEGORIES } from '@/types/product';
+import type { InventoryProduct } from '@/types/inventory';
+import { useCategories } from '@hooks/useCategories';
+import { formatCategoryName } from '@utils/categoryLabel';
 import { formatInr } from '@utils/formatCurrency';
+import { dialog } from '@utils/dialog';
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -34,14 +38,7 @@ import { z } from 'zod';
 
 const productFormSchema = z.object({
   name: z.string().min(1, 'Product name is required').min(3, 'Minimum 3 characters'),
-  category: z
-    .string()
-    .min(1, 'Select a category')
-    .refine(
-      (value): value is ProductCategory =>
-        PRODUCT_CATEGORIES.includes(value as ProductCategory),
-      'Select a category',
-    ),
+  categoryId: z.string().uuid('Select a category'),
   price: z
     .string()
     .min(1, 'Price is required')
@@ -53,13 +50,13 @@ const productFormSchema = z.object({
 
 type ProductFormValues = {
   name: string;
-  category: string;
+  categoryId: string;
   price: string;
 };
 
 const defaultFormValues: ProductFormValues = {
   name: '',
-  category: '',
+  categoryId: '',
   price: '',
 };
 
@@ -69,22 +66,39 @@ export default function Step5ProductsScreen() {
   const { width, h1, h2, body, label, micro, button } = useFontScale();
   const scrollRef = useRef<ScrollView>(null);
 
-  const products = useOnboardingStore((state) => state.products);
-  const addProduct = useOnboardingStore((state) => state.addProduct);
-  const removeProduct = useOnboardingStore((state) => state.removeProduct);
   const setStoreStatus = useOnboardingStore((state) => state.setStoreStatus);
   const setOnboardingStep = useOnboardingStore((state) => state.setOnboardingStep);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
 
+  const [apiProducts, setApiProducts] = useState<InventoryProduct[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageFileName, setImageFileName] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  const [draftSavedVisible, setDraftSavedVisible] = useState(false);
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const addedCount = products.length;
+  const { data: categories = [], isLoading: isLoadingCategories } = useCategories();
+
+  // Load persisted products from the server on mount so progress survives restarts.
+  useEffect(() => {
+    const fetchApiProducts = async () => {
+      try {
+        const fetched = await getProducts({ status: 'active', is_draft: false });
+        setApiProducts(fetched);
+      } catch {
+        // Network failure — fall back to showing only local products
+      } finally {
+        setIsLoadingProducts(false);
+      }
+    };
+    void fetchApiProducts();
+  }, []);
+
+  // Only count DB-persisted products (local-only products are no longer used).
+  const addedCount = apiProducts.length;
   const remaining = Math.max(0, MIN_PRODUCTS_REQUIRED - addedCount);
   const progressPercent = Math.min(100, (addedCount / MIN_PRODUCTS_REQUIRED) * 100);
   const canContinue = addedCount >= MIN_PRODUCTS_REQUIRED;
@@ -101,11 +115,14 @@ export default function Step5ProductsScreen() {
     mode: 'onChange',
   });
 
-  const selectedCategory = watch('category');
+  const selectedCategoryId = watch('categoryId');
+  const selectedCategoryLabel =
+    categories.find((c) => c.id === selectedCategoryId)?.name ?? '';
 
   const resetForm = useCallback(() => {
     reset(defaultFormValues);
     setImageUri(null);
+    setImageFileName(null);
     setImageError(null);
   }, [reset]);
 
@@ -113,75 +130,65 @@ export default function Step5ProductsScreen() {
     const picked = await pickImageFromLibrary();
     if (picked?.fileUri) {
       setImageUri(picked.fileUri);
+      setImageFileName(picked.fileName ?? null);
       setImageError(null);
     }
   };
 
   const handleRemoveProduct = (id: string, name: string) => {
-    Alert.alert('Remove product', `Remove "${name}" from your list?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => removeProduct(id),
+    void dialog.confirm(`Remove "${name}"?`, 'This product will be deleted from your list.', {
+      destructive: true,
+      confirmText: 'Remove',
+      onConfirm: () => {
+        void removeProductApi(id)
+          .then(() => setApiProducts((prev) => prev.filter((p) => p.id !== id)))
+          .catch(() => dialog.alert('Error', 'Could not remove product. Try again.'));
       },
-    ]);
+    });
   };
 
-  const onAddProduct = (values: ProductFormValues) => {
+  const onAddProduct = async (values: ProductFormValues) => {
     if (!imageUri) {
       setImageError('Product image is required');
       return;
     }
 
-    const price = Number(values.price.replace(/,/g, ''));
-    const category = values.category as ProductCategory;
-    const product: Product = {
-      id: String(Date.now()),
-      name: values.name.trim(),
-      category,
-      price,
-      imageUri,
-    };
-
-    addProduct(product);
-    resetForm();
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  };
-
-  const handleSaveDraft = async () => {
-    setIsSavingDraft(true);
-    setDraftSavedVisible(false);
+    setIsSavingProduct(true);
     try {
-      await saveDraft(products);
-      setDraftSavedVisible(true);
-      setTimeout(() => setDraftSavedVisible(false), 2500);
+      const saved = await saveSimpleProduct({
+        name: values.name.trim(),
+        categoryId: values.categoryId,
+        price: Number(values.price.replace(/,/g, '')),
+        imageUri,
+        imageFileName: imageFileName ?? undefined,
+      });
+      setApiProducts((prev) => [...prev, saved]);
+      resetForm();
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to save draft. Please try again.';
-      Alert.alert('Save failed', message);
+      void dialog.alert('Could not save product', handleApiError(error));
     } finally {
-      setIsSavingDraft(false);
+      setIsSavingProduct(false);
     }
   };
 
   const handleContinue = async () => {
-    if (!canContinue) {
-      return;
-    }
     setApiError(null);
     setIsSubmitting(true);
     try {
-      await submitProducts(products);
-      setOnboardingStep(7);
-      setStoreStatus('review');
-      router.replace('/(onboarding)/review-pending');
+      const result = await submitForReview();
+      if (result.autoApproved) {
+        router.replace('/(onboarding)/store-live');
+      } else if (result.submitted) {
+        router.replace('/(onboarding)/review-pending');
+      } else {
+        const needed = result.required - result.productsCount;
+        setApiError(
+          `Add ${needed} more product${needed === 1 ? '' : 's'} to launch your store.`,
+        );
+      }
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to submit products. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -205,10 +212,14 @@ export default function Step5ProductsScreen() {
         </Text>
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -216,7 +227,7 @@ export default function Step5ProductsScreen() {
           Add Your Products
         </Text>
         <Text className="mt-2" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-          Upload at least 10 products to launch your jewelry storefront.
+          Upload at least {MIN_PRODUCTS_REQUIRED} products to launch your jewelry storefront.
         </Text>
 
         <View
@@ -274,7 +285,11 @@ export default function Step5ProductsScreen() {
           </Text>
         </View>
 
-        {products.map((product) => (
+        {isLoadingProducts ? (
+          <ActivityIndicator color={colors.NAVY} style={{ marginTop: 16 }} />
+        ) : null}
+
+        {apiProducts.map((product) => (
           <View
             key={product.id}
             className="mt-3 flex-row rounded-xl border p-3"
@@ -282,11 +297,7 @@ export default function Step5ProductsScreen() {
           >
             <Image
               source={{ uri: product.imageUri }}
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: 8,
-              }}
+              style={{ width: 80, height: 80, borderRadius: 8 }}
               resizeMode="cover"
             />
             <View className="ml-3 flex-1 justify-between">
@@ -296,7 +307,7 @@ export default function Step5ProductsScreen() {
                     {product.name}
                   </Text>
                   <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-                    {product.category}
+                    {formatCategoryName(product.category)}
                   </Text>
                   <Text className="mt-1 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
                     {formatInr(product.price)}
@@ -319,7 +330,7 @@ export default function Step5ProductsScreen() {
                     className="font-semibold uppercase"
                     style={{ fontSize: micro, color: colors.WHITE }}
                   >
-                    {product.category}
+                    {formatCategoryName(product.category)}
                   </Text>
                 </View>
               </View>
@@ -394,13 +405,17 @@ export default function Step5ProductsScreen() {
                 </Text>
                 <Controller
                   control={control}
-                  name="category"
+                  name="categoryId"
                   render={({ field: { onChange, value } }) => (
                     <>
                       <Pressable
-                        onPress={() => setCategoryModalVisible(true)}
+                        onPress={() => {
+                          if (!isLoadingCategories && categories.length > 0) {
+                            setCategoryModalVisible(true);
+                          }
+                        }}
                         className="flex-row items-center justify-between rounded-lg border px-3 py-2"
-                        style={{ borderColor: colors.BORDER }}
+                        style={{ borderColor: errors.categoryId ? colors.ERROR : colors.BORDER }}
                       >
                         <Text
                           style={{
@@ -408,7 +423,11 @@ export default function Step5ProductsScreen() {
                             color: value ? colors.NAVY : colors.BODY_TEXT,
                           }}
                         >
-                          {value || 'Select'}
+                          {isLoadingCategories
+                            ? 'Loading…'
+                            : selectedCategoryLabel
+                              ? formatCategoryName(selectedCategoryLabel)
+                              : 'Select'}
                         </Text>
                         <Ionicons name="chevron-down" size={width * 0.04} color={colors.BODY_TEXT} />
                       </Pressable>
@@ -433,13 +452,13 @@ export default function Step5ProductsScreen() {
                             >
                               Select category
                             </Text>
-                            {PRODUCT_CATEGORIES.map((category) => {
-                              const isSelected = category === selectedCategory;
+                            {categories.map((category) => {
+                              const isSelected = category.id === selectedCategoryId;
                               return (
                                 <Pressable
-                                  key={category}
+                                  key={category.id}
                                   onPress={() => {
-                                    onChange(category);
+                                    onChange(category.id);
                                     setCategoryModalVisible(false);
                                   }}
                                   className="rounded-lg px-3 py-3"
@@ -448,7 +467,7 @@ export default function Step5ProductsScreen() {
                                   }}
                                 >
                                   <Text style={{ fontSize: body, color: colors.NAVY }}>
-                                    {category}
+                                    {formatCategoryName(category.name)}
                                   </Text>
                                 </Pressable>
                               );
@@ -504,13 +523,18 @@ export default function Step5ProductsScreen() {
         ) : null}
 
         <Pressable
-          onPress={handleSubmit(onAddProduct)}
+          onPress={() => { void handleSubmit(onAddProduct)(); }}
+          disabled={isSavingProduct || isSubmitting}
           className="mt-4 items-center justify-center rounded-xl border py-3"
-          style={{ borderColor: colors.NAVY }}
+          style={{ borderColor: colors.NAVY, minHeight: 48, opacity: isSavingProduct ? 0.7 : 1 }}
         >
-          <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
-            + Add Another Product
-          </Text>
+          {isSavingProduct ? (
+            <ActivityIndicator color={colors.NAVY} />
+          ) : (
+            <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
+              + Add Another Product
+            </Text>
+          )}
         </Pressable>
       </ScrollView>
 
@@ -524,63 +548,33 @@ export default function Step5ProductsScreen() {
           </Text>
         ) : null}
 
-        <View className="flex-row items-center" style={{ gap: width * 0.03 }}>
-          <Pressable
-            onPress={() => void handleSaveDraft()}
-            disabled={isSavingDraft || isSubmitting}
-            className="flex-1 flex-row items-center justify-center rounded-xl border py-3"
-            style={{ borderColor: colors.BORDER, minHeight: 52 }}
-          >
-            {isSavingDraft ? (
-              <ActivityIndicator color={colors.NAVY} />
-            ) : (
-              <>
-                <Text style={{ fontSize: body, marginRight: 4 }}>💾</Text>
-                <Text className="font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
-                  Save Draft
-                </Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => void handleContinue()}
-            disabled={!canContinue || isSubmitting}
-            className="flex-1 flex-row items-center justify-center rounded-xl py-3"
-            style={{
-              backgroundColor: canContinue ? colors.NAVY : colors.SURFACE_MUTED,
-              minHeight: 52,
-            }}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.WHITE} />
-            ) : (
-              <>
-                <Text style={{ fontSize: body, marginRight: 4 }}>🚀</Text>
-                <Text
-                  className="font-semibold"
-                  style={{
-                    fontSize: label,
-                    color: canContinue ? colors.WHITE : colors.BODY_TEXT,
-                  }}
-                >
-                  Continue to Launch
-                </Text>
-              </>
-            )}
-          </Pressable>
-        </View>
-
-        {draftSavedVisible ? (
-          <Text className="mt-2 text-center" style={{ fontSize: micro, color: colors.SUCCESS }}>
-            Draft Saved
-          </Text>
-        ) : null}
+        <Pressable
+          onPress={() => void handleContinue()}
+          disabled={isSubmitting || isSavingProduct}
+          className="flex-row items-center justify-center rounded-xl py-3"
+          style={{
+            backgroundColor: colors.NAVY,
+            minHeight: 52,
+            opacity: isSubmitting || isSavingProduct ? 0.7 : 1,
+          }}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.WHITE} />
+          ) : (
+            <>
+              <Text style={{ fontSize: body, marginRight: 4 }}>🚀</Text>
+              <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
+                Continue to Launch
+              </Text>
+            </>
+          )}
+        </Pressable>
 
         <Text className="mt-3 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
           Your store will become live after product verification.
         </Text>
       </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

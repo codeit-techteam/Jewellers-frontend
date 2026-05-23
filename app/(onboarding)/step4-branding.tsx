@@ -4,7 +4,8 @@ import { StepNavButtons } from '@components/ui/StepNavButtons';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
+import { handleApiError } from '@utils/handleApiError';
+import { dialog } from '@utils/dialog';
 import { submitBranding } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,7 +13,6 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
@@ -32,7 +32,7 @@ const NAVY_BANNER = '#1B2B4B';
 async function pickBrandingImage(aspect: [number, number]): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== 'granted') {
-    Alert.alert('Permission required', 'Photo library access is needed to upload images.');
+    void dialog.alert('Permission required', 'Photo library access is needed to upload images.');
     return null;
   }
 
@@ -101,9 +101,7 @@ export default function Step4BrandingScreen() {
       setStep4Data(data);
       router.push('/(onboarding)/step5-subscription');
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to save branding. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -164,8 +162,8 @@ export default function Step4BrandingScreen() {
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
       >
         <ScrollView
           className="flex-1 px-5"

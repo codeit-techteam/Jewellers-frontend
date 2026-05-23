@@ -174,7 +174,7 @@ export default function SalesReportScreen() {
         ))}
 
         <Pressable
-          onPress={showComingSoonAlert}
+          onPress={() => showComingSoonAlert()}
           className="mt-4 items-center justify-center rounded-xl border py-4"
           style={{ borderColor: colors.NAVY }}
         >

@@ -1,7 +1,9 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { APP_BRAND_NAME, LEAD_FILTER_OPTIONS } from '@constants/leads';
 import { colors } from '@constants/colors';
-import { downloadLeadsReport, updateLeadStatusApi } from '@services/leadsService';
+import { downloadLeadsReport, getLeads, updateLeadStatusApi } from '@services/leadsService';
 import {
   countUpcomingLeads,
   getFilteredLeads,
@@ -11,20 +13,13 @@ import {
 import { useProfileStore } from '@store/useProfileStore';
 import type { Lead } from '@/types/leads';
 import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo } from 'react';
-import {
-  Alert,
-  Image,
-  Linking,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Image, Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function LeadCard({
@@ -152,7 +147,25 @@ export default function LeadsScreen() {
   const searchQuery = useLeadsStore((state) => state.searchQuery);
   const setFilter = useLeadsStore((state) => state.setFilter);
   const setSearchQuery = useLeadsStore((state) => state.setSearchQuery);
+  const setLeads = useLeadsStore((state) => state.setLeads);
   const updateLeadStatus = useLeadsStore((state) => state.updateLeadStatus);
+
+  const leadStatus =
+    activeFilter === 'upcoming' || activeFilter === 'visited' ? activeFilter : undefined;
+
+  const {
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['leads', activeFilter],
+    queryFn: async () => {
+      const data = await getLeads(leadStatus);
+      setLeads(data);
+      return data;
+    },
+  });
 
   const filteredLeads = useMemo(
     () => getFilteredLeads(leads, activeFilter, searchQuery),
@@ -162,8 +175,15 @@ export default function LeadsScreen() {
   const upcomingCount = useMemo(() => countUpcomingLeads(leads), [leads]);
 
   const handleStatusUpdate = (id: string, status: 'visited') => {
-    updateLeadStatus(id, status);
-    void updateLeadStatusApi(id, status);
+    void (async () => {
+      try {
+        await updateLeadStatusApi(id, status);
+        updateLeadStatus(id, status);
+        await refetch();
+      } catch (err) {
+        void dialog.alert('Error', handleApiError(err));
+      }
+    })();
   };
 
   const showContactOptions = (lead: Lead) => {
@@ -173,7 +193,7 @@ export default function LeadsScreen() {
       `Hi ${lead.name}, confirming your appointment on ${lead.appointmentDate} at ${lead.appointmentTime} for ${lead.serviceRequested}`,
     );
 
-    Alert.alert('Contact Lead', lead.name, [
+    void dialog.alert('Contact Lead', lead.name, [
       {
         text: '📞 Call',
         onPress: () => void Linking.openURL(`tel:${phone}`),
@@ -187,17 +207,14 @@ export default function LeadsScreen() {
   };
 
   const confirmMarkVisited = (lead: Lead) => {
-    Alert.alert('Mark as Visited', `Mark ${lead.name} as Visited?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Confirm',
-        onPress: () => handleStatusUpdate(lead.id, 'visited'),
-      },
-    ]);
+    void dialog.confirm('Mark as Visited', `Mark ${lead.name} as Visited?`, {
+      confirmText: 'Confirm',
+      onConfirm: () => handleStatusUpdate(lead.id, 'visited'),
+    });
   };
 
   const showLeadDetails = (lead: Lead) => {
-    Alert.alert(
+    void dialog.alert(
       lead.name,
       `Phone: ${lead.phone}\n\nAppointment: ${lead.appointmentDate} at ${lead.appointmentTime}\n\nService: ${lead.serviceRequested}\n\nStatus: ${lead.status}`,
       [{ text: 'Close', style: 'cancel' }],
@@ -205,9 +222,23 @@ export default function LeadsScreen() {
   };
 
   const handleDownloadReport = () => {
-    void downloadLeadsReport();
-    Alert.alert('Coming Soon', 'Export feature coming soon');
+    void (async () => {
+      try {
+        await downloadLeadsReport();
+        void dialog.alert('Coming Soon', 'Export feature coming soon');
+      } catch (err) {
+        void dialog.alert('Error', handleApiError(err));
+      }
+    })();
   };
+
+  if (isPending && leads.length === 0) {
+    return <LoadingScreen message="Loading leads…" />;
+  }
+
+  if (isError && leads.length === 0) {
+    return <ErrorScreen message={handleApiError(error)} onRetry={() => void refetch()} />;
+  }
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>

@@ -3,6 +3,7 @@ import type { Step1Data, Step2Data, Step3Data, Step4Data } from '@/types/onboard
 import type { Step5Data, Step6Data } from '@/types/payment';
 import type { Product } from '@/types/product';
 import { create } from 'zustand';
+import { useInventoryStore } from '@store/useInventoryStore';
 
 export type OnboardingStoreStatus = 'idle' | 'review' | 'approved' | 'rejected';
 
@@ -75,7 +76,8 @@ export const useOnboardingStore = create<OnboardingStoreState>((set) => ({
   },
 
   setStep5Data: (data) => {
-    const nextOnboardingStep = data.planId === 'free' ? 6 : 5;
+    // Free plan (price 0, no subscriptionId) → advance to step 6; paid → stay on step 5
+    const nextOnboardingStep = (data.price ?? 0) === 0 && !data.subscriptionId ? 6 : 5;
     set({
       step5: data,
       currentStep: 5,
@@ -125,5 +127,8 @@ export const useOnboardingStore = create<OnboardingStoreState>((set) => ({
 
   setStoreStatus: (status) => set({ storeStatus: status }),
 
-  resetOnboarding: () => set(initialState),
+  resetOnboarding: () => {
+    set(initialState);
+    useInventoryStore.getState().clearProducts();
+  },
 }));

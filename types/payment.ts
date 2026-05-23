@@ -1,11 +1,12 @@
 export type PaymentMethod = 'upi' | 'card';
 
-export type PlanId = 'free' | 'pro' | 'featured';
+/** Plans now use backend UUIDs — no longer a fixed union. */
+export type PlanId = string;
 
 export type BillingCycle = 'monthly' | 'annual';
 
 export type Plan = {
-  id: PlanId;
+  id: string;
   name: string;
   monthlyPrice: number;
   checkoutPrice: number;
@@ -15,10 +16,12 @@ export type Plan = {
 };
 
 export type Step5Data = {
-  planId: PlanId;
+  planId: string;
   planName: string;
   price: number;
   billingCycle: BillingCycle;
+  /** Returned by chooseSubscription for paid plans; absent for free. */
+  subscriptionId?: string;
 };
 
 export type Step6Data = {
@@ -27,13 +30,7 @@ export type Step6Data = {
   transactionId?: string;
 };
 
-export type PaymentInitiateResponse = {
+export type MockPaymentResponse = {
   success: boolean;
   transactionId: string;
-  message: string;
-};
-
-export type PaymentVerifyResponse = {
-  success: boolean;
-  status: string;
 };

@@ -1,0 +1,34 @@
+export type AnalyticsRange = 'today' | 'yesterday' | '7days' | '30days';
+
+export type AnalyticsOverview = {
+  views: number;
+  wishlist: number;
+  inquiry: number;
+  waClicks: number;
+  appointments: number;
+  range: AnalyticsRange;
+  startDate: string;
+  endDate: string;
+};
+
+export type ProductAnalyticsRow = {
+  productId: string;
+  productName: string;
+  price: number;
+  status: string;
+  sku: string;
+  views: number;
+  wishlist: number;
+  inquiry: number;
+  waClicks: number;
+};
+
+export type StoreAnalytics = {
+  visits: number;
+  contactClicks: {
+    total: number;
+    call: number;
+    whatsapp: number;
+  };
+  period: string;
+};

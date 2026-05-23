@@ -2,13 +2,19 @@ import type { Href } from 'expo-router';
 
 /**
  * Returns the route a jeweller should land on based on onboarding progress.
+ * storeStatus takes priority over step number when it indicates a terminal state.
  */
 export function getResumeRoute(
   isOnboardingComplete: boolean,
   currentStep: number,
+  storeStatus?: string,
 ): Href {
-  if (isOnboardingComplete) {
+  if (isOnboardingComplete || storeStatus === 'approved') {
     return '/(app)';
+  }
+
+  if (storeStatus === 'review') {
+    return '/(onboarding)/review-pending';
   }
 
   switch (currentStep) {
@@ -27,6 +33,6 @@ export function getResumeRoute(
     case 7:
       return '/(onboarding)/review-pending';
     default:
-      return '/(onboarding)/step1-business-info';
+      return '/';
   }
 }

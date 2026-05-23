@@ -17,6 +17,12 @@ export class ApiError extends Error {
   }
 }
 
+// Set by useAuthStore to avoid circular imports (api → store → service → api)
+let _onUnauthorized: (() => void) | null = null;
+export function registerUnauthorizedHandler(fn: () => void): void {
+  _onUnauthorized = fn;
+}
+
 export const api = axios.create({
   baseURL: config.apiUrl,
   timeout: 30000,
@@ -32,13 +38,25 @@ api.interceptors.request.use(
     if (token && requestConfig.headers) {
       requestConfig.headers.Authorization = `Bearer ${token}`;
     }
+
     return requestConfig;
   },
   (error: AxiosError) => Promise.reject(error),
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Unwrap backend envelope: { success, data, message } → payload
+    if (
+      response.data !== null &&
+      typeof response.data === 'object' &&
+      'success' in response.data &&
+      'data' in response.data
+    ) {
+      response.data = response.data.data;
+    }
+    return response;
+  },
   async (error: AxiosError<{ message?: string; code?: string }>) => {
     const status = error.response?.status;
     const message =
@@ -47,6 +65,7 @@ api.interceptors.response.use(
 
     if (status === 401) {
       await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      _onUnauthorized?.();
     }
 
     return Promise.reject(new ApiError(message, status, code));

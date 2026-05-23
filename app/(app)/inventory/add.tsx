@@ -1,22 +1,32 @@
 import { InventoryProductForm } from '@components/inventory/InventoryProductForm';
 import type { InventoryFormSubmitMode } from '@components/inventory/InventoryProductForm';
 import { colors } from '@constants/colors';
-import { addProduct as addProductApi, saveDraftProduct } from '@services/inventoryService';
+import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
+import {
+  addProduct as addProductApi,
+  getProduct,
+  saveDraftProduct,
+  updateProductApi,
+} from '@services/inventoryService';
 import { useInventoryStore } from '@store/useInventoryStore';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AddProductForm, InventoryProduct } from '@/types/inventory';
 import { calculateProductPrice } from '@utils/calculateProductPrice';
+import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function toAddProductForm(product: InventoryProduct): AddProductForm {
   return {
     name: product.name,
-    category: product.category,
+    categoryId: product.categoryId,
     weight: product.weight,
     purity: product.purity,
     makingChargesType: product.makingChargesType,
@@ -37,53 +47,61 @@ export default function AddProductScreen() {
     returnTo?: string;
   }>();
 
+  const queryClient = useQueryClient();
   const products = useInventoryStore((state) => state.products);
   const addProduct = useInventoryStore((state) => state.addProduct);
   const updateProduct = useInventoryStore((state) => state.updateProduct);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const draftProduct = useMemo(
+  const cachedDraft = useMemo(
     () => (productId ? products.find((item) => item.id === productId) : undefined),
     [productId, products],
   );
 
+  const { data: fetchedDraft } = useQuery({
+    queryKey: inventoryQueryKeys.detail(productId ?? ''),
+    queryFn: () => getProduct(productId!),
+    enabled: Boolean(productId && !cachedDraft),
+  });
+
+  const draftProduct = cachedDraft ?? fetchedDraft;
   const isCompleteDraftMode = Boolean(draftProduct?.isDraft && productId);
+
+  if (productId && !draftProduct) {
+    return <LoadingScreen message="Loading draft…" />;
+  }
 
   const handleSubmit = async (product: InventoryProduct, mode: InventoryFormSubmitMode) => {
     setIsSubmitting(true);
     try {
+      const price = calculateProductPrice(
+        product.weight,
+        product.makingChargesType,
+        product.makingChargesValue,
+      );
       const formData = toAddProductForm(product);
 
       if (isCompleteDraftMode && productId) {
-        if (mode === 'draft') {
-          await saveDraftProduct(formData);
-          updateProduct(productId, { ...product, isDraft: true, price: 0 });
-        } else {
-          const price = calculateProductPrice(
-            product.weight,
-            product.makingChargesType,
-            product.makingChargesValue,
-          );
-          await addProductApi(formData);
-          updateProduct(productId, { ...product, price, isDraft: false });
-        }
+        // Updating an existing draft product — use PUT, not POST
+        const isDraft = mode === 'draft';
+        const saved = await updateProductApi(productId, { ...product, price, isDraft });
+        updateProduct(productId, saved);
+        void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
         navigateBack(router, returnTo);
         return;
       }
 
       if (mode === 'draft') {
         const saved = await saveDraftProduct(formData);
-        addProduct({ ...saved, ...product, isDraft: true, price: 0 });
+        addProduct(saved);
       } else {
-        const price = calculateProductPrice(
-          product.weight,
-          product.makingChargesType,
-          product.makingChargesValue,
-        );
         const saved = await addProductApi(formData);
-        addProduct({ ...saved, ...product, price, isDraft: false });
+        addProduct(saved);
       }
+      void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
       navigateBack(router, returnTo);
+    } catch (err) {
+      void dialog.alert('Error', handleApiError(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -107,12 +125,14 @@ export default function AddProductScreen() {
           {isCompleteDraftMode ? 'Complete Product' : 'Add New Product'}
         </Text>
       </View>
-      <InventoryProductForm
-        mode="add"
-        initialProduct={isCompleteDraftMode ? draftProduct : undefined}
-        isSubmitting={isSubmitting}
-        onSubmit={(p, m) => void handleSubmit(p, m)}
-      />
+      <View style={{ flex: 1 }}>
+        <InventoryProductForm
+          mode="add"
+          initialProduct={isCompleteDraftMode ? draftProduct : undefined}
+          isSubmitting={isSubmitting}
+          onSubmit={(p, m) => void handleSubmit(p, m)}
+        />
+      </View>
     </View>
   );
 }

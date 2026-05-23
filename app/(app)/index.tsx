@@ -1,22 +1,24 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
-import {
-  MOCK_MARKETPLACE_PRODUCTS_EXTRA,
-  MOCK_NEW_LEADS,
-  MOCK_PLAN_RENEWAL_DATE,
-  MOCK_VIEWS_GROWTH_PERCENT,
-} from '@constants/inventory';
 import { getResumeRoute } from '@lib/getResumeRoute';
+import { getOverview } from '@services/analyticsService';
+import { getProducts } from '@services/inventoryService';
+import { getNotifications } from '@services/notificationsService';
+import { getStore } from '@services/storeService';
+import type { AnalyticsRange } from '@/types/analytics';
+import { handleApiError } from '@utils/handleApiError';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { getActiveProducts, getTotalViews, useInventoryStore } from '@store/useInventoryStore';
-import { useLeadsStore } from '@store/useLeadsStore';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Modal,
   Platform,
@@ -46,13 +48,16 @@ const RANGE_LABELS: Record<DateRangeKey, string> = {
   custom: 'CUSTOM RANGE',
 };
 
-const RANGE_MULTIPLIERS: Record<DateRangeKey, { views: number; leads: number }> = {
-  today: { views: 1, leads: 1 },
-  yesterday: { views: 0.85, leads: 0.9 },
-  '7days': { views: 6.2, leads: 5.8 },
-  '30days': { views: 24, leads: 22 },
-  custom: { views: 24, leads: 22 },
-};
+function toApiRange(key: DateRangeKey): AnalyticsRange {
+  if (key === 'custom') return '30days';
+  return key;
+}
+
+function formatRenewalDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = dayjs(iso);
+  return d.isValid() ? d.format('MMM D, YYYY') : '—';
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -67,20 +72,55 @@ export default function DashboardScreen() {
 
   const isOnboardingComplete = useOnboardingStore((state) => state.isOnboardingComplete);
   const currentOnboardingStep = useOnboardingStore((state) => state.currentOnboardingStep);
-  const step1 = useOnboardingStore((state) => state.step1);
-  const step4 = useOnboardingStore((state) => state.step4);
-  const step5 = useOnboardingStore((state) => state.step5);
-  const products = useInventoryStore((state) => state.products);
-  const leads = useLeadsStore((state) => state.leads);
-
-  const storeName = step1?.businessName ?? 'Royal Jewellers';
-  const logoUri = step4?.logoUri ?? null;
-  const planName = step5?.planName?.toUpperCase() ?? 'FREE PLAN';
-  const activeProducts = getActiveProducts(products);
-  const baseViews = getTotalViews(products);
-  const baseLeads = leads.length;
-
   const [selectedRange, setSelectedRange] = useState<DateRangeKey>('today');
+  const apiRange = toApiRange(selectedRange);
+
+  const storeQuery = useQuery({
+    queryKey: ['store'],
+    queryFn: getStore,
+  });
+
+  const overviewQuery = useQuery({
+    queryKey: ['analytics', apiRange],
+    queryFn: () => getOverview(apiRange),
+  });
+
+  const productsQuery = useQuery({
+    queryKey: ['products', 'active'],
+    queryFn: () => getProducts({ status: 'active', is_draft: false }),
+  });
+
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => getNotifications(),
+  });
+
+  const store = storeQuery.data;
+  const overview = overviewQuery.data;
+  const activeProducts = productsQuery.data ?? [];
+  const notificationsMeta = notificationsQuery.data;
+  const overviewLoading = overviewQuery.isPending || overviewQuery.isFetching;
+
+  const isDashboardLoading =
+    (storeQuery.isPending && !store) || (overviewQuery.isPending && !overview);
+  const dashboardError = storeQuery.error ?? overviewQuery.error;
+  const showDashboardError =
+    (storeQuery.isError || overviewQuery.isError) && !store && !overview;
+
+  const refetchDashboard = () => {
+    void storeQuery.refetch();
+    void overviewQuery.refetch();
+    void productsQuery.refetch();
+    void notificationsQuery.refetch();
+  };
+
+  const storeName = store?.businessName ?? 'Your Store';
+  const logoUri = store?.logoUrl ?? null;
+  const planName = (store?.planName ?? 'Free Plan').toUpperCase();
+  const totalViews = overview?.views ?? 0;
+  const totalLeads = overview?.appointments ?? 0;
+  const unreadCount = notificationsMeta?.unreadCount ?? 0;
+  const planRenewal = formatRenewalDate(store?.planRenewalDate);
   const [dateRangeLabel, setDateRangeLabel] = useState(RANGE_LABELS.today);
   const [rangeModalVisible, setRangeModalVisible] = useState(false);
   const [customFrom, setCustomFrom] = useState(dayjs().subtract(6, 'day').toDate());
@@ -92,12 +132,6 @@ export default function DashboardScreen() {
       router.replace(getResumeRoute(false, currentOnboardingStep));
     }
   }, [isOnboardingComplete, currentOnboardingStep, router]);
-
-  const multiplier = RANGE_MULTIPLIERS[selectedRange];
-  const totalViews = Math.round(baseViews * multiplier.views);
-  const totalLeads = Math.round(baseLeads * multiplier.leads);
-
-  const unreadCount = useMemo(() => 2, []);
 
   const applyRange = (key: DateRangeKey) => {
     setSelectedRange(key);
@@ -111,6 +145,22 @@ export default function DashboardScreen() {
     setRangeModalVisible(false);
     setPickerTarget(null);
   };
+
+  if (isOnboardingComplete && showDashboardError) {
+    return (
+      <View className="flex-1 bg-white" style={{ paddingTop: insets.top }}>
+        <StatusBar style="dark" />
+        <ErrorScreen
+          message={handleApiError(dashboardError)}
+          onRetry={refetchDashboard}
+        />
+      </View>
+    );
+  }
+
+  if (isOnboardingComplete && isDashboardLoading) {
+    return <LoadingScreen message="Loading dashboard…" />;
+  }
 
   const handlePickerChange = (_event: unknown, date?: Date) => {
     if (Platform.OS === 'android') {
@@ -207,36 +257,34 @@ export default function DashboardScreen() {
             className="mb-3 rounded-xl border p-4"
             style={{ width: '48%', borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
           >
-            <View className="flex-row items-center justify-between">
-              <Ionicons name="eye-outline" size={width * 0.055} color={colors.NAVY} />
-              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.SUCCESS}22` }}>
-                <Text style={{ fontSize: micro, color: colors.SUCCESS }}>{MOCK_VIEWS_GROWTH_PERCENT}</Text>
-              </View>
-            </View>
+            <Ionicons name="eye-outline" size={width * 0.055} color={colors.NAVY} />
             <Text className="mt-3 uppercase" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
               Total Views
             </Text>
-            <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
-              {totalViews.toLocaleString('en-IN')}
-            </Text>
+            {overviewLoading ? (
+              <ActivityIndicator className="mt-2" color={colors.NAVY} />
+            ) : (
+              <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
+                {totalViews.toLocaleString('en-IN')}
+              </Text>
+            )}
           </View>
 
           <View
             className="mb-3 rounded-xl border p-4"
             style={{ width: '48%', borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
           >
-            <View className="flex-row items-center justify-between">
-              <Ionicons name="chatbubble-outline" size={width * 0.055} color={colors.NAVY} />
-              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.NAVY }}>
-                <Text style={{ fontSize: micro, color: colors.WHITE }}>{MOCK_NEW_LEADS} NEW</Text>
-              </View>
-            </View>
+            <Ionicons name="chatbubble-outline" size={width * 0.055} color={colors.NAVY} />
             <Text className="mt-3 uppercase" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-              Total Leads
+              Appointments
             </Text>
-            <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
-              {totalLeads.toLocaleString('en-IN')}
-            </Text>
+            {overviewLoading ? (
+              <ActivityIndicator className="mt-2" color={colors.NAVY} />
+            ) : (
+              <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
+                {totalLeads.toLocaleString('en-IN')}
+              </Text>
+            )}
           </View>
 
           <View
@@ -274,9 +322,11 @@ export default function DashboardScreen() {
                   )}
                 </View>
               ))}
-              <Text className="ml-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-                +{MOCK_MARKETPLACE_PRODUCTS_EXTRA}
-              </Text>
+              {activeProducts.length > 2 ? (
+                <Text className="ml-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+                  +{activeProducts.length - 2}
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -295,7 +345,7 @@ export default function DashboardScreen() {
               Active
             </Text>
             <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-              Renews: {MOCK_PLAN_RENEWAL_DATE}
+              Renews: {planRenewal}
             </Text>
           </View>
         </View>

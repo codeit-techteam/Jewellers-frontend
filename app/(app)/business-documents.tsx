@@ -1,6 +1,8 @@
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
 import { DOCUMENT_TYPE_OPTIONS } from '@constants/profile';
-import { uploadDocument } from '@services/profileService';
+import { getDocuments, replaceDocument, uploadDocument } from '@services/storeService';
 import { useProfileStore } from '@store/useProfileStore';
 import type { BusinessDocument } from '@/types/profile';
 import {
@@ -8,14 +10,16 @@ import {
   getDocumentStatusAccent,
   getDocumentStatusBadge,
 } from '@utils/documentHelpers';
+import { handleApiError } from '@utils/handleApiError';
 import { showComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
-import { Alert, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { dialog } from '@utils/dialog';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -195,10 +199,28 @@ export default function BusinessDocumentsScreen() {
   const micro = width * 0.028;
 
   const documents = useProfileStore((state) => state.documents);
-  const updateDocument = useProfileStore((state) => state.updateDocument);
-  const addDocument = useProfileStore((state) => state.addDocument);
+  const setDocuments = useProfileStore((state) => state.setDocuments);
   const scrollRef = useRef<ScrollView>(null);
   const cardOffsetsRef = useRef<Record<string, number>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadDocuments = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const docs = await getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      setLoadError(handleApiError(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setDocuments]);
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
 
   const highlightType =
     highlightDoc === 'gst' || highlightDoc === 'bis' ? highlightDoc : undefined;
@@ -222,16 +244,16 @@ export default function BusinessDocumentsScreen() {
     if (!uri) {
       return;
     }
-    await uploadDocument(doc.type, uri);
-    updateDocument(doc.id, {
-      fileUri: uri,
-      status: 'pending',
-      updatedAt: 'Just now',
-    });
+    try {
+      await replaceDocument(doc.id, uri);
+      await loadDocuments();
+    } catch (err) {
+      void dialog.alert('Upload failed', handleApiError(err));
+    }
   };
 
   const handleAddDocument = () => {
-    Alert.alert('Add Document', 'Select document type', [
+    void dialog.alert('Add Document', 'Select document type', [
       ...DOCUMENT_TYPE_OPTIONS.map((item) => ({
         text: item.label,
         onPress: () => {
@@ -240,21 +262,28 @@ export default function BusinessDocumentsScreen() {
             if (!uri) {
               return;
             }
-            await uploadDocument(item.type, uri);
-            addDocument({
-              id: String(Date.now()),
-              name: item.label,
-              type: item.type,
-              status: 'pending',
-              updatedAt: 'Just now',
-              fileUri: uri,
-            });
+            try {
+              await uploadDocument(item.type, uri);
+              await loadDocuments();
+            } catch (err) {
+              void dialog.alert('Upload failed', handleApiError(err));
+            }
           })();
         },
       })),
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
+
+  if (isLoading && documents.length === 0) {
+    return <LoadingScreen message="Loading documents…" />;
+  }
+
+  if (loadError && documents.length === 0) {
+    return (
+      <ErrorScreen message={loadError} onRetry={() => void loadDocuments()} />
+    );
+  }
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
@@ -301,7 +330,7 @@ export default function BusinessDocumentsScreen() {
             onLayout={(y) => {
               cardOffsetsRef.current[doc.id] = y;
             }}
-            onView={() => Alert.alert('Coming Soon', 'Document viewer coming soon')}
+            onView={() => showComingSoonAlert('Document viewer')}
             onReplace={() => void handleReplace(doc)}
             onUpdate={() => void handleReplace(doc)}
           />
@@ -336,7 +365,7 @@ export default function BusinessDocumentsScreen() {
       </ScrollView>
 
       <Pressable
-        onPress={showComingSoonAlert}
+        onPress={() => showComingSoonAlert()}
         className="absolute items-center justify-center rounded-full"
         style={{
           width: 52,

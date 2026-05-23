@@ -4,7 +4,8 @@ import { useFontScale } from '@hooks/useFontScale';
 import type { Step2Data } from '@/types/onboarding';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Image, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
+import { dialog } from '@utils/dialog';
 
 import { formatFileSize } from '@utils/formatFileSize';
 
@@ -62,7 +63,7 @@ export function DocumentUploader({
   const takePhoto = async () => {
     const granted = await requestCameraPermission();
     if (!granted) {
-      Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+      void dialog.alert('Permission required', 'Camera access is needed to take a photo.');
       return;
     }
 
@@ -211,7 +212,7 @@ export function DocumentUploader({
 export async function pickImageFromLibrary(): Promise<Step2Data | null> {
   const granted = await requestMediaPermission();
   if (!granted) {
-    Alert.alert('Permission required', 'Photo library access is needed to upload images.');
+    void dialog.alert('Permission required', 'Photo library access is needed to upload images.');
     return null;
   }
 

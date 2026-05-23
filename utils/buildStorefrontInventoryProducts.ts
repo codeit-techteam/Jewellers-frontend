@@ -8,6 +8,7 @@ export type StorefrontDisplayProduct = {
   name: string;
   price: number;
   imageUri: string;
+  categoryId?: string;
   category: string;
 };
 
@@ -21,6 +22,7 @@ export function buildStorefrontInventoryProducts(
       name: product.name,
       price: product.price,
       imageUri: product.imageUri,
+      categoryId: product.categoryId,
       category: product.category,
     }));
 

@@ -5,6 +5,8 @@ export const ONBOARDING_META_KEY = 'onboarding_meta';
 export type OnboardingMeta = {
   currentOnboardingStep: number;
   isOnboardingComplete: boolean;
+  /** Last known store_status from the server — used for offline fallback routing. */
+  storeStatus?: string;
 };
 
 export async function saveOnboardingMeta(meta: OnboardingMeta): Promise<void> {

@@ -3,8 +3,8 @@ import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { colors } from '@constants/colors';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
-import { initiatePayment } from '@services/paymentService';
+import { handleApiError } from '@utils/handleApiError';
+import { mockPayment } from '@services/paymentService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { PaymentMethod } from '@/types/payment';
 import { formatInr } from '@utils/formatCurrency';
@@ -85,7 +85,7 @@ export default function Step6CheckoutScreen() {
     return () => clearTimeout(timer);
   }, [paymentSuccess, router]);
 
-  if (!step5 || step5.planId === 'free') {
+  if (!step5 || !step5.subscriptionId) {
     return <Redirect href="/(onboarding)/step5-subscription" />;
   }
 
@@ -100,7 +100,7 @@ export default function Step6CheckoutScreen() {
     setApiError(null);
     setIsPaying(true);
     try {
-      const response = await initiatePayment(step5.planId, paymentMethod, step5.price);
+      const response = await mockPayment(step5.subscriptionId!, paymentMethod);
       setStep6Data({
         paymentMethod,
         status: 'success',
@@ -108,9 +108,7 @@ export default function Step6CheckoutScreen() {
       });
       setPaymentSuccess(true);
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Payment failed. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
       setStep6Data({ paymentMethod, status: 'failed' });
     } finally {
       setIsPaying(false);

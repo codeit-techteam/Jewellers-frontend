@@ -5,7 +5,7 @@ import { DEFAULT_COUNTRY } from '@constants/countries';
 import { colors } from '@constants/colors';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
+import { handleApiError } from '@utils/handleApiError';
 import { sendOtp } from '@services/authService';
 import { useAuthStore } from '@store/useAuthStore';
 import type { CountryOption } from '@/types/auth';
@@ -68,9 +68,7 @@ export default function LoginScreen() {
       setPhoneForOtp(values.phone, selectedCountry.dial);
       router.push('/(auth)/verify');
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to send OTP. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsSubmitting(false);
     }

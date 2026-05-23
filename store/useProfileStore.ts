@@ -1,4 +1,6 @@
-import { INITIAL_MOCK_DOCUMENTS, createInitialProfile } from '@constants/profile';
+import { createInitialProfile } from '@constants/profile';
+import type { StoreProfile } from '@/types/store';
+import { storeProfileToBusinessProfile } from '@/types/store';
 import type { BusinessDocument, BusinessProfile } from '@/types/profile';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { create } from 'zustand';
@@ -11,13 +13,15 @@ type ProfileStoreState = {
   updateDocument: (id: string, data: Partial<BusinessDocument>) => void;
   addDocument: (doc: BusinessDocument) => void;
   setLoading: (loading: boolean) => void;
+  setDocuments: (documents: BusinessDocument[]) => void;
+  applyStoreProfile: (store: StoreProfile) => void;
   syncFromOnboarding: () => void;
   resetToInitial: () => void;
 };
 
 export const useProfileStore = create<ProfileStoreState>((set) => ({
   profile: createInitialProfile(),
-  documents: INITIAL_MOCK_DOCUMENTS,
+  documents: [],
   isLoading: false,
 
   updateProfile: (data) =>
@@ -37,10 +41,18 @@ export const useProfileStore = create<ProfileStoreState>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
+  setDocuments: (documents) => set({ documents }),
+
+  applyStoreProfile: (store) =>
+    set({
+      profile: storeProfileToBusinessProfile(store),
+      documents: store.documents,
+    }),
+
   resetToInitial: () =>
     set({
       profile: createInitialProfile(),
-      documents: INITIAL_MOCK_DOCUMENTS,
+      documents: [],
       isLoading: false,
     }),
 

@@ -1,12 +1,14 @@
-export type UserRole = 'jeweller' | 'admin' | 'partner';
+export type UserRole = 'jeweller' | 'customer' | 'admin';
 
 export type User = {
   id: string;
-  name: string;
   phone: string;
-  businessName: string;
-  isVerified: boolean;
   role: UserRole;
+  /** Mapped from backend is_phone_verified */
+  isVerified: boolean;
+  name?: string;
+  /** Kept for UI compatibility — not returned by /auth/me */
+  businessName?: string;
 };
 
 export type SendOtpResponse = {
@@ -21,6 +23,8 @@ export type VerifyOtpResponse = {
   user: User;
   onboardingStep: number;
   isOnboardingComplete: boolean;
+  storeStatus: string | null;
+  isNewUser: boolean;
 };
 
 export type CountryOption = {

@@ -1,73 +1,56 @@
-import type {
-  PaymentInitiateResponse,
-  PaymentMethod,
-  PaymentVerifyResponse,
-  PlanId,
-} from '@/types/payment';
+import type { MockPaymentResponse, PaymentMethod, Plan } from '@/types/payment';
 
 import { api, ApiError } from './api';
 
-export const USE_MOCK = true;
-
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-type InitiatePaymentBody = {
-  planId: PlanId;
-  paymentMethod: PaymentMethod;
-  amount: number;
+// Raw shape from backend /subscription/plans
+type BackendPlan = {
+  id: string;
+  name: string;
+  price_monthly: number;
+  price_annual: number;
+  features: string[] | Record<string, string>;
+  is_active: boolean;
 };
 
-type VerifyPaymentBody = {
-  transactionId: string;
-};
-
-export async function initiatePayment(
-  planId: PlanId,
-  paymentMethod: PaymentMethod,
-  amount: number,
-): Promise<PaymentInitiateResponse> {
-  if (USE_MOCK) {
-    await delay(1500);
-    return {
-      success: true,
-      transactionId: 'TXN123456',
-      message: 'Payment initiated successfully',
-    };
-  }
-
+/** Fetches subscription plans from the backend (public endpoint, no auth). */
+export async function getPlans(): Promise<Plan[]> {
   try {
-    const { data } = await api.post<PaymentInitiateResponse>('/payment/initiate', {
-      planId,
-      paymentMethod,
-      amount,
-    } satisfies InitiatePaymentBody);
-    return data;
+    const { data } = await api.get<BackendPlan[]>('/subscription/plans');
+
+    return data.map((bp, index) => {
+      const hasAnnual = bp.price_annual > 0;
+      return {
+        id: bp.id,
+        name: bp.name,
+        monthlyPrice: bp.price_monthly,
+        checkoutPrice: hasAnnual ? bp.price_annual : bp.price_monthly,
+        billingCycle: hasAnnual ? 'annual' : 'monthly',
+        features: Array.isArray(bp.features)
+          ? bp.features
+          : Object.values(bp.features as Record<string, string>),
+        // Second plan in the sorted list is "Best Value" (middle paid tier)
+        isBestValue: index === 1 && bp.price_monthly > 0,
+      };
+    });
   } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new ApiError('Payment initiation failed');
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to load subscription plans');
   }
 }
 
-export async function verifyPayment(transactionId: string): Promise<PaymentVerifyResponse> {
-  if (USE_MOCK) {
-    await delay(800);
-    return { success: true, status: 'completed' };
-  }
-
+/** Mock payment gateway — dev only. Backend always succeeds and returns a transaction ID. */
+export async function mockPayment(
+  subscriptionId: string,
+  method: PaymentMethod,
+): Promise<MockPaymentResponse> {
   try {
-    const { data } = await api.post<PaymentVerifyResponse>('/payment/verify', {
-      transactionId,
-    } satisfies VerifyPaymentBody);
+    const { data } = await api.post<MockPaymentResponse>('/subscription/payment/mock', {
+      subscriptionId,
+      method,
+    });
     return data;
   } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new ApiError('Payment verification failed');
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Payment failed. Please try again.');
   }
 }

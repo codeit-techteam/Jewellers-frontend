@@ -1,109 +1,65 @@
-import { getResumeRoute } from '@lib/getResumeRoute';
-import { loadOnboardingMeta } from '@lib/onboardingMeta';
 import type { Href } from 'expo-router';
 import type { SendOtpResponse, User, VerifyOtpResponse } from '@/types/auth';
-import { useAuthStore } from '@store/useAuthStore';
 
+import { getResumeRoute } from '@lib/getResumeRoute';
 import { api, ApiError } from './api';
 
-export const USE_MOCK = true;
-
-const MOCK_TOKEN = 'mock-jwt-token-for-testing';
-const MOCK_OTP = '123456';
-
-type SendOtpBody = {
-  countryCode: string;
+// Raw shape returned by /auth/me before mapping
+type RawMeResponse = {
+  id: string;
   phone: string;
+  role: 'jeweller' | 'customer' | 'admin';
+  name?: string;
+  full_name?: string;
+  is_phone_verified: boolean;
 };
-
-type VerifyOtpBody = {
-  phone: string;
-  otp: string;
-};
-
-type ResendOtpBody = {
-  phone: string;
-};
-
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-function buildMockUser(phone: string): User {
-  return {
-    id: 'mock-user-001',
-    name: 'Test Jeweller',
-    phone,
-    businessName: 'Test Jewels Pvt Ltd',
-    isVerified: true,
-    role: 'jeweller',
-  };
-}
 
 export async function sendOtp(countryCode: string, phone: string): Promise<SendOtpResponse> {
-  if (USE_MOCK) {
-    await delay(1000);
-    return {
-      success: true,
-      message: 'OTP sent',
-      expiresIn: 45,
-    };
-  }
-
   try {
-    const { data } = await api.post<SendOtpResponse>('/auth/send-otp', {
-      countryCode,
-      phone,
-    } satisfies SendOtpBody);
+    const { data } = await api.post<SendOtpResponse>('/auth/send-otp', { phone, countryCode });
     return data;
   } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
+    if (error instanceof ApiError) throw error;
     throw new ApiError('Failed to send OTP');
   }
 }
 
 export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpResponse> {
-  if (USE_MOCK) {
-    await delay(500);
-    if (otp !== MOCK_OTP) {
-      throw new ApiError('Invalid OTP. Please try again.');
-    }
-
-    const authMode = useAuthStore.getState().authMode;
-    let onboardingStep = 1;
-    let isOnboardingComplete = false;
-
-    if (authMode === 'login') {
-      const existingMeta = await loadOnboardingMeta();
-      if (existingMeta) {
-        onboardingStep = existingMeta.currentOnboardingStep;
-        isOnboardingComplete = existingMeta.isOnboardingComplete;
-      }
-    }
-
-    return {
-      success: true,
-      token: MOCK_TOKEN,
-      user: buildMockUser(phone),
-      onboardingStep,
-      isOnboardingComplete,
-    };
-  }
-
   try {
-    const { data } = await api.post<VerifyOtpResponse>('/auth/verify-otp', {
-      phone,
-      otp,
-    } satisfies VerifyOtpBody);
+    const { data } = await api.post<VerifyOtpResponse>('/auth/verify-otp', { phone, otp });
     return data;
   } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
+    if (error instanceof ApiError) throw error;
     throw new ApiError('Failed to verify OTP');
+  }
+}
+
+export async function resendOtp(phone: string, countryCode?: string): Promise<SendOtpResponse> {
+  try {
+    const { data } = await api.post<SendOtpResponse>('/auth/resend-otp', { phone, countryCode });
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to resend OTP');
+  }
+}
+
+export async function getMe(): Promise<User> {
+  const { data } = await api.get<RawMeResponse>('/auth/me');
+  return {
+    id: data.id,
+    phone: data.phone,
+    role: data.role,
+    isVerified: data.is_phone_verified,
+    name: data.name ?? data.full_name,
+  };
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await api.post('/auth/logout');
+  } catch {
+    // Best effort — local cleanup always happens regardless
   }
 }
 
@@ -113,27 +69,4 @@ export function getResumeRouteForStep(
   onboardingStep: number,
 ): Href {
   return getResumeRoute(isOnboardingComplete, onboardingStep);
-}
-
-export async function resendOtp(phone: string): Promise<SendOtpResponse> {
-  if (USE_MOCK) {
-    await delay(500);
-    return {
-      success: true,
-      message: 'OTP sent',
-      expiresIn: 45,
-    };
-  }
-
-  try {
-    const { data } = await api.post<SendOtpResponse>('/auth/resend-otp', {
-      phone,
-    } satisfies ResendOtpBody);
-    return data;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new ApiError('Failed to resend OTP');
-  }
 }

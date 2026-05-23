@@ -1,12 +1,10 @@
 import { colors } from '@constants/colors';
-import {
-  MANAGE_STORE_ACTIONS,
-  STORE_MANAGING_SINCE,
-  STORE_PREMIUM_TIER_LABEL,
-} from '@constants/storeApp';
+import { MANAGE_STORE_ACTIONS } from '@constants/storeApp';
+import dayjs from 'dayjs';
 import { useRequireOnboardingComplete } from '@hooks/useRequireOnboardingComplete';
-import { getPerformanceSnapshot } from '@services/storeAppService';
-import { useOnboardingStore } from '@store/useOnboardingStore';
+import { getOverview } from '@services/analyticsService';
+import { getProducts } from '@services/inventoryService';
+import { getStore } from '@services/storeService';
 import { showComingSoonAlert, showShareComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -17,8 +15,9 @@ import {
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
+  ActivityIndicator,
   Image,
   ImageBackground,
   Pressable,
@@ -30,11 +29,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const NAVY_BANNER = '#1B2B4B';
-
-type PerformanceStats = {
-  views: number;
-  leads: number;
-};
 
 export default function MyLiveStoreScreen() {
   useRequireOnboardingComplete();
@@ -50,29 +44,37 @@ export default function MyLiveStoreScreen() {
   const micro = width * 0.028;
   const button = width * 0.042;
 
-  const step1 = useOnboardingStore((state) => state.step1);
-  const step4 = useOnboardingStore((state) => state.step4);
-  const products = useOnboardingStore((state) => state.products);
+  const { data: store, isLoading: storeLoading } = useQuery({
+    queryKey: ['store'],
+    queryFn: getStore,
+  });
 
-  const storeName = step1?.businessName ?? 'Your Store';
-  const logoUri = step4?.logoUri ?? null;
-  const coverImageUri = step4?.coverImageUri ?? null;
+  const { data: overview } = useQuery({
+    queryKey: ['analytics', 'today'],
+    queryFn: () => getOverview('today'),
+  });
+
+  const { data: activeProducts = [] } = useQuery({
+    queryKey: ['products', 'active'],
+    queryFn: () => getProducts({ status: 'active', is_draft: false }),
+  });
+
+  const storeName = store?.businessName ?? 'Your Store';
+  const logoUri = store?.logoUrl ?? null;
+  const coverImageUri = store?.coverImageUrl ?? null;
   const storeInitial = storeName.trim().charAt(0).toUpperCase() || 'S';
-  const productCount = products.length;
-
-  const [performance, setPerformance] = useState<PerformanceStats>({ views: 0, leads: 0 });
-
-  useEffect(() => {
-    let mounted = true;
-    void getPerformanceSnapshot().then((snapshot) => {
-      if (mounted) {
-        setPerformance(snapshot);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const productCount = activeProducts.length;
+  const planLabel = store?.planName ?? 'Free Plan';
+  const isLive = store?.storeStatus === 'approved';
+  const isVerified = store?.storeStatus === 'approved';
+  const planTierLabel = planLabel.toUpperCase();
+  const memberSinceYear = (() => {
+    const raw = store?.memberSince;
+    if (!raw) return null;
+    const d = dayjs(raw);
+    return d.isValid() ? d.format('YYYY') : null;
+  })();
+  const planSubtitle = memberSinceYear ? `${planLabel} · ${memberSinceYear}` : planLabel;
 
   const handleManageAction = (action: (typeof MANAGE_STORE_ACTIONS)[number]) => {
     if (action.comingSoon) {
@@ -88,10 +90,18 @@ export default function MyLiveStoreScreen() {
   };
 
   const statCards = [
-    { label: 'VIEWS', value: String(performance.views) },
+    { label: 'VIEWS', value: String(overview?.views ?? 0) },
     { label: 'PRODUCTS', value: String(productCount) },
-    { label: 'LEADS', value: String(performance.leads) },
+    { label: 'LEADS', value: String(overview?.appointments ?? 0) },
   ];
+
+  if (storeLoading && !store) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator size="large" color={colors.NAVY} />
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
@@ -134,15 +144,17 @@ export default function MyLiveStoreScreen() {
               resizeMode="cover"
             >
               <View className="flex-1">
-                <View
-                  className="absolute right-3 top-3 flex-row items-center rounded-full px-3 py-1"
-                  style={{ backgroundColor: colors.NAVY }}
-                >
-                  <Ionicons name="checkmark-circle" size={micro * 1.2} color={colors.SUCCESS} />
-                  <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
-                    VERIFIED
-                  </Text>
-                </View>
+                {isVerified ? (
+                  <View
+                    className="absolute right-3 top-3 flex-row items-center rounded-full px-3 py-1"
+                    style={{ backgroundColor: colors.NAVY }}
+                  >
+                    <Ionicons name="checkmark-circle" size={micro * 1.2} color={colors.SUCCESS} />
+                    <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
+                      VERIFIED
+                    </Text>
+                  </View>
+                ) : null}
                 <View
                   className="absolute bottom-0 left-0 right-0 justify-end px-4 pb-4 pt-10"
                   style={{ backgroundColor: colors.OVERLAY_DARK }}
@@ -181,7 +193,9 @@ export default function MyLiveStoreScreen() {
                             backgroundColor: colors.SUCCESS,
                           }}
                         />
-                        <Text style={{ fontSize: label, color: colors.WHITE }}>Store is Live</Text>
+                        <Text style={{ fontSize: label, color: colors.WHITE }}>
+                          {isLive ? 'Store is Live' : store?.storeStatus ?? 'Pending'}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -190,15 +204,17 @@ export default function MyLiveStoreScreen() {
             </ImageBackground>
           ) : (
             <View style={{ width: '100%', height: '100%', backgroundColor: NAVY_BANNER }}>
-              <View
-                className="absolute right-3 top-3 flex-row items-center rounded-full px-3 py-1"
-                style={{ backgroundColor: colors.NAVY }}
-              >
-                <Ionicons name="checkmark-circle" size={micro * 1.2} color={colors.SUCCESS} />
-                <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
-                  VERIFIED
-                </Text>
-              </View>
+              {isVerified ? (
+                <View
+                  className="absolute right-3 top-3 flex-row items-center rounded-full px-3 py-1"
+                  style={{ backgroundColor: colors.NAVY }}
+                >
+                  <Ionicons name="checkmark-circle" size={micro * 1.2} color={colors.SUCCESS} />
+                  <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
+                    VERIFIED
+                  </Text>
+                </View>
+              ) : null}
               <View
                 className="absolute bottom-0 left-0 right-0 justify-end px-4 pb-4 pt-10"
                 style={{ backgroundColor: colors.OVERLAY_DARK }}
@@ -237,7 +253,9 @@ export default function MyLiveStoreScreen() {
                           backgroundColor: colors.SUCCESS,
                         }}
                       />
-                      <Text style={{ fontSize: label, color: colors.WHITE }}>Store is Live</Text>
+                      <Text style={{ fontSize: label, color: colors.WHITE }}>
+                        {isLive ? 'Store is Live' : store?.storeStatus ?? 'Pending'}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -252,11 +270,9 @@ export default function MyLiveStoreScreen() {
               className="font-semibold uppercase tracking-wider"
               style={{ fontSize: micro, color: colors.GOLD }}
             >
-              {STORE_PREMIUM_TIER_LABEL}
+              {planTierLabel}
             </Text>
-            <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>
-              Managing since {STORE_MANAGING_SINCE}
-            </Text>
+            <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>{planSubtitle}</Text>
           </View>
           <Pressable
             onPress={() =>

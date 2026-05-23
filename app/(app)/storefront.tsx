@@ -10,23 +10,27 @@ import {
   STOREFRONT_VISIT_HOURS,
   type StorefrontCategoryTab,
 } from '@constants/storeApp';
-import { useOnboardingStore } from '@store/useOnboardingStore';
-import { useInventoryStore } from '@store/useInventoryStore';
+import { getProducts, trackEvent } from '@services/inventoryService';
+import { getStore } from '@services/storeService';
+import type { InventoryProduct } from '@/types/inventory';
 import { useProfileStore } from '@store/useProfileStore';
 import {
   buildStorefrontInventoryProducts,
   type StorefrontDisplayProduct,
 } from '@utils/buildStorefrontInventoryProducts';
 import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
+import { handleApiError } from '@utils/handleApiError';
+import { dialog } from '@utils/dialog';
 import { showShareComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Image,
+  ImageBackground,
   Linking,
   Pressable,
   ScrollView,
@@ -37,7 +41,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function isTrackableInventoryId(id: string): boolean {
-  return id.startsWith('inv-') || id.startsWith('draft-');
+  // Mock/filler storefront products use 'mock-' prefix; real inventory products are UUIDs
+  return !id.startsWith('mock-');
 }
 
 export default function StorefrontScreen() {
@@ -54,16 +59,47 @@ export default function StorefrontScreen() {
   const button = width * 0.042;
   const productNameSize = width * 0.036;
 
-  const step1 = useOnboardingStore((state) => state.step1);
-  const step4 = useOnboardingStore((state) => state.step4);
-  const inventoryProducts = useInventoryStore((state) => state.products);
-  const incrementView = useInventoryStore((state) => state.incrementView);
-  const incrementWaClick = useInventoryStore((state) => state.incrementWaClick);
   const profile = useProfileStore((state) => state.profile);
+  const applyStoreProfile = useProfileStore((state) => state.applyStoreProfile);
 
-  const storeName = step1?.businessName ?? 'Your Store';
-  const logoUri = step4?.logoUri ?? null;
-  const visitAddress = profile.address;
+  const storeQuery = useQuery({
+    queryKey: ['store'],
+    queryFn: getStore,
+  });
+
+  const store = storeQuery.data;
+  const storeName = store?.businessName ?? profile.businessName ?? 'Your Store';
+  const logoUri = store?.logoUrl ?? profile.logoUri ?? null;
+  const coverUri = store?.coverImageUrl ?? profile.coverUri ?? null;
+  const tagline = store?.tagline ?? '';
+  const aboutText =
+    store?.description || store?.tagline || STOREFRONT_ABOUT_BODY;
+  const storePhone = store?.phone || profile.phone;
+  const visitAddress = store?.address || profile.address;
+  const visitHours =
+    store?.openingTime && store?.closingTime
+      ? `${store.openingTime} – ${store.closingTime}`
+      : STOREFRONT_VISIT_HOURS;
+
+  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
+
+  useEffect(() => {
+    if (store) {
+      applyStoreProfile(store);
+    }
+  }, [store, applyStoreProfile]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const products = await getProducts({ status: 'active', is_draft: false });
+        setInventoryProducts(products);
+      } catch (err) {
+        handleApiError(err);
+        setInventoryProducts([]);
+      }
+    })();
+  }, []);
 
   const [selectedCategory, setSelectedCategory] = useState<StorefrontCategoryTab>(
     STOREFRONT_CATEGORIES[0],
@@ -83,31 +119,26 @@ export default function StorefrontScreen() {
   );
 
   const handleCall = () => {
-    void Linking.openURL(`tel:${profile.phone}`);
+    void Linking.openURL(`tel:${storePhone}`);
   };
 
   const handleWhatsApp = () => {
-    const phone = profile.phone.replace(/\D/g, '');
+    const phone = storePhone.replace(/\D/g, '');
     void Linking.openURL(`https://wa.me/${phone}`);
-    inventoryProducts.forEach((product) => {
-      if (isTrackableInventoryId(product.id)) {
-        incrementWaClick(product.id);
-      }
-    });
   };
 
   const handleMap = () => {
-    const encoded = encodeURIComponent(profile.address);
+    const encoded = encodeURIComponent(visitAddress);
     void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encoded}`);
   };
 
   const handleViewDetails = useCallback(
     (product: StorefrontDisplayProduct) => {
       if (!isTrackableInventoryId(product.id)) {
-        Alert.alert('Preview product', 'Add this product to your inventory to view full details.');
+        void dialog.alert('Preview product', 'Add this product to your inventory to view full details.');
         return;
       }
-      incrementView(product.id);
+      trackEvent(product.id, 'view');
       router.push({
         pathname: '/(app)/product-detail',
         params: {
@@ -116,7 +147,7 @@ export default function StorefrontScreen() {
         },
       });
     },
-    [incrementView, returnTo, router],
+    [returnTo, router],
   );
 
   return (
@@ -156,6 +187,16 @@ export default function StorefrontScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
+        {coverUri ? (
+          <View className="mx-4 mt-4 overflow-hidden rounded-xl" style={{ height: width * 0.4 }}>
+            <ImageBackground
+              source={{ uri: coverUri }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          </View>
+        ) : null}
+
         <View
           className="mx-4 mt-4 rounded-xl border p-4"
           style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
@@ -322,7 +363,7 @@ export default function StorefrontScreen() {
             About {storeName}
           </Text>
           <Text className="mt-3 leading-relaxed" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-            {STOREFRONT_ABOUT_BODY}
+            {aboutText}
           </Text>
           <View className="mt-4 flex-row flex-wrap justify-between">
             {STOREFRONT_TRUST_BADGES.map((badge) => (
@@ -368,7 +409,7 @@ export default function StorefrontScreen() {
                   {visitAddress}
                 </Text>
                 <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-                  {STOREFRONT_VISIT_HOURS}
+                  {visitHours}
                 </Text>
               </View>
               <Pressable

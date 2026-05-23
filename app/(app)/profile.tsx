@@ -1,6 +1,11 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import { SUPPORT_PHONE } from '@constants/profile';
+import { getStore, updateCover, updateLogo } from '@services/storeService';
+import type { BusinessDocument } from '@/types/profile';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { handleApiError } from '@utils/handleApiError';
+import { dialog } from '@utils/dialog';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { useInventoryStore } from '@store/useInventoryStore';
@@ -14,9 +19,12 @@ import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
 import { useEffect } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Image,
+  ImageBackground,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -88,28 +96,35 @@ export default function ProfileScreen() {
   const micro = width * 0.028;
   const button = width * 0.042;
 
+  const queryClient = useQueryClient();
   const profile = useProfileStore((state) => state.profile);
-  const syncFromOnboarding = useProfileStore((state) => state.syncFromOnboarding);
+  const documents = useProfileStore((state) => state.documents);
+  const applyStoreProfile = useProfileStore((state) => state.applyStoreProfile);
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const resetProfile = useProfileStore((state) => state.resetToInitial);
   const logout = useAuthStore((state) => state.logout);
   const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
-  const setStep4Data = useOnboardingStore((state) => state.setStep4Data);
-  const step5 = useOnboardingStore((state) => state.step5);
-  const resetInventory = useInventoryStore((state) => state.resetToInitial);
+  const clearInventory = useInventoryStore((state) => state.clearProducts);
   const resetLeads = useLeadsStore((state) => state.resetToInitial);
 
-  const planName = step5?.planName ?? 'Free Plan';
+  const planName = profile.plan ?? 'Free Plan';
   const isPaidPlan = planName.toLowerCase() !== 'free' && planName.toLowerCase() !== 'free plan';
 
+  const storeQuery = useQuery({
+    queryKey: ['store'],
+    queryFn: getStore,
+  });
+
   useEffect(() => {
-    syncFromOnboarding();
-  }, [syncFromOnboarding]);
+    if (storeQuery.data) {
+      applyStoreProfile(storeQuery.data);
+    }
+  }, [storeQuery.data, applyStoreProfile]);
 
   const handleLogoPick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Photo library access is needed to update your logo.');
+      void dialog.alert('Permission required', 'Photo library access is needed to update your logo.');
       return;
     }
 
@@ -124,18 +139,90 @@ export default function ProfileScreen() {
       return;
     }
 
-    const logoUri = result.assets[0].uri;
-    updateProfile({ logoUri });
-    const step4 = useOnboardingStore.getState().step4;
-    setStep4Data({
-      logoUri,
-      coverImageUri: step4?.coverImageUri ?? null,
-      tagline: step4?.tagline ?? '',
+    const localUri = result.assets[0].uri;
+    try {
+      const logoUrl = await updateLogo(localUri);
+      updateProfile({ logoUri: logoUrl });
+      void queryClient.invalidateQueries({ queryKey: ['store'] });
+    } catch (err) {
+      void dialog.alert('Upload failed', handleApiError(err));
+    }
+  };
+
+  const handleCoverPick = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      void dialog.alert('Permission required', 'Photo library access is needed to update your cover image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
     });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const localUri = result.assets[0].uri;
+    try {
+      const coverUrl = await updateCover(localUri);
+      updateProfile({ coverUri: coverUrl });
+      void queryClient.invalidateQueries({ queryKey: ['store'] });
+    } catch (err) {
+      void dialog.alert('Upload failed', handleApiError(err));
+    }
+  };
+
+  const gstDoc = documents.find((d) => d.type === 'gst');
+  const bisDoc = documents.find((d) => d.type === 'bis');
+
+  const docStatusLabel = (doc: BusinessDocument | undefined) => {
+    if (!doc) return 'Not uploaded';
+    return doc.updatedAt;
+  };
+
+  const docBadge = (doc: BusinessDocument | undefined) => {
+    if (!doc) {
+      return (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.SURFACE_MUTED }}>
+          <Text style={{ fontSize: micro, color: colors.BODY_TEXT, fontWeight: '700' }}>MISSING</Text>
+        </View>
+      );
+    }
+    if (doc.status === 'verified') {
+      return (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.SUCCESS}22` }}>
+          <Text style={{ fontSize: micro, color: colors.SUCCESS, fontWeight: '700' }}>VERIFIED</Text>
+        </View>
+      );
+    }
+    if (doc.status === 'expiring') {
+      return (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.TIP_BG }}>
+          <Text style={{ fontSize: micro, color: colors.GOLD, fontWeight: '700' }}>EXPIRING SOON</Text>
+        </View>
+      );
+    }
+    if (doc.status === 'expired') {
+      return (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.ERROR}22` }}>
+          <Text style={{ fontSize: micro, color: colors.ERROR, fontWeight: '700' }}>EXPIRED</Text>
+        </View>
+      );
+    }
+    return (
+      <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.SURFACE_MUTED }}>
+        <Text style={{ fontSize: micro, color: colors.BODY_TEXT, fontWeight: '700' }}>PENDING</Text>
+      </View>
+    );
   };
 
   const handleContactSupport = () => {
-    Alert.alert('Contact Support', 'How would you like to reach us?', [
+    void dialog.alert('Contact Support', 'How would you like to reach us?', [
       {
         text: '📞 Call Support',
         onPress: () => void Linking.openURL(`tel:${SUPPORT_PHONE}`),
@@ -158,23 +245,18 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            await logout();
-            resetOnboarding();
-            resetInventory();
-            resetLeads();
-            resetProfile();
-            router.replace('/');
-          })();
-        },
+    void dialog.confirm('Logout', 'Are you sure you want to logout?', {
+      destructive: true,
+      confirmText: 'Logout',
+      onConfirm: async () => {
+        await logout();
+        resetOnboarding();
+        clearInventory();
+        resetLeads();
+        resetProfile();
+        router.replace('/');
       },
-    ]);
+    });
   };
 
   return (
@@ -185,12 +267,54 @@ export default function ProfileScreen() {
         Profile Settings
       </Text>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => void handleLogoPick()} className="items-center">
+        <Pressable onPress={() => void handleCoverPick()} className="relative overflow-hidden">
+          {profile.coverUri ? (
+            <ImageBackground
+              source={{ uri: profile.coverUri }}
+              style={{ width: '100%', height: width * 0.36 }}
+              resizeMode="cover"
+            >
+              <View
+                className="absolute bottom-3 right-3 flex-row items-center rounded-full px-3 py-1.5"
+                style={{ backgroundColor: colors.OVERLAY_DARK }}
+              >
+                <Ionicons name="camera" size={14} color={colors.WHITE} />
+                <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
+                  Edit cover
+                </Text>
+              </View>
+            </ImageBackground>
+          ) : (
+            <View
+              className="items-center justify-center"
+              style={{ width: '100%', height: width * 0.36, backgroundColor: colors.NAVY }}
+            >
+              <Ionicons name="image-outline" size={32} color={colors.WHITE} />
+              <Text className="mt-2 font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
+                Add cover image
+              </Text>
+            </View>
+          )}
+        </Pressable>
+
+        {storeQuery.isPending && !storeQuery.data ? (
+          <View className="items-center py-6">
+            <ActivityIndicator size="small" color={colors.NAVY} />
+          </View>
+        ) : null}
+
+        <View className="px-5">
+        <Pressable onPress={() => void handleLogoPick()} className="-mt-10 items-center">
           <View className="relative">
             <View
               className="items-center justify-center overflow-hidden rounded-2xl border"
@@ -232,12 +356,14 @@ export default function ProfileScreen() {
         <Text className="mt-4 text-center font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
           {profile.businessName}
         </Text>
-        <View className="mt-2 flex-row items-center justify-center">
-          <Ionicons name="checkmark-circle" size={16} color={colors.NAVY} />
-          <Text className="ml-1 font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
-            Verified B2B Member
-          </Text>
-        </View>
+        {profile.isVerified ? (
+          <View className="mt-2 flex-row items-center justify-center">
+            <Ionicons name="checkmark-circle" size={16} color={colors.NAVY} />
+            <Text className="ml-1 font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
+              Verified B2B Member
+            </Text>
+          </View>
+        ) : null}
         <Text className="mt-1 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
           Member ID: {profile.memberId}
         </Text>
@@ -335,7 +461,7 @@ export default function ProfileScreen() {
           <SettingsRow
             icon="document-text-outline"
             label="GST Certificate"
-            subtitle="Updated Jan 2024"
+            subtitle={docStatusLabel(gstDoc)}
             onPress={() =>
               router.push({
                 pathname: '/(app)/business-documents',
@@ -346,22 +472,17 @@ export default function ProfileScreen() {
             micro={micro}
             rightElement={
               <View className="flex-row items-center">
-                <View
-                  className="mr-2 rounded-full px-2 py-0.5"
-                  style={{ backgroundColor: `${colors.SUCCESS}22` }}
-                >
-                  <Text style={{ fontSize: micro, color: colors.SUCCESS, fontWeight: '700' }}>
-                    VERIFIED
-                  </Text>
-                </View>
-                <Ionicons name="download-outline" size={18} color={colors.BODY_TEXT} />
+                <View className="mr-2">{docBadge(gstDoc)}</View>
+                <Ionicons name="chevron-forward" size={18} color={colors.BODY_TEXT} />
               </View>
             }
           />
           <SettingsRow
             icon="shield-checkmark-outline"
             label="BIS License"
-            subtitle="License No: BIS-992011"
+            subtitle={
+              bisDoc?.licenseNo ? `License No: ${bisDoc.licenseNo}` : docStatusLabel(bisDoc)
+            }
             onPress={() =>
               router.push({
                 pathname: '/(app)/business-documents',
@@ -371,16 +492,7 @@ export default function ProfileScreen() {
             body={body}
             micro={micro}
             isLast
-            rightElement={
-              <View
-                className="rounded-full px-2 py-0.5"
-                style={{ backgroundColor: colors.TIP_BG }}
-              >
-                <Text style={{ fontSize: micro, color: colors.GOLD, fontWeight: '700' }}>
-                  EXPIRING SOON
-                </Text>
-              </View>
-            }
+            rightElement={docBadge(bisDoc)}
           />
         </View>
 
@@ -394,7 +506,9 @@ export default function ProfileScreen() {
             Logout
           </Text>
         </Pressable>
+        </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

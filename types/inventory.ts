@@ -11,6 +11,8 @@ export type InventoryProduct = {
   id: string;
   name: string;
   sku: string;
+  categoryId: string;
+  /** Display name from categories table */
   category: string;
   price: number;
   weight: number;
@@ -27,7 +29,7 @@ export type InventoryProduct = {
 
 export type AddProductForm = {
   name: string;
-  category: string;
+  categoryId: string;
   weight: number;
   purity: string;
   makingChargesType: MakingChargesType;

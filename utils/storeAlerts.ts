@@ -1,17 +1,21 @@
-import { Alert } from 'react-native';
+import { dialog } from '@utils/dialog';
 
-export function showComingSoonAlert(): void {
-  Alert.alert('Coming Soon', 'This feature will be available shortly.');
+export function showComingSoonAlert(feature?: string): void {
+  void dialog.alert(
+    'Coming Soon',
+    feature ? `${feature} will be available shortly.` : 'This feature will be available shortly.',
+    undefined,
+  );
 }
 
 export function showShareComingSoonAlert(): void {
-  Alert.alert('Coming Soon', 'Share feature coming soon');
+  void dialog.alert('Coming Soon', 'Share feature coming soon');
 }
 
 export function showProductDetailComingSoonAlert(): void {
-  Alert.alert('Coming Soon', 'Product detail screen coming soon');
+  void dialog.alert('Coming Soon', 'Product detail screen coming soon');
 }
 
 export function showMapNavigationComingSoonAlert(): void {
-  Alert.alert('Coming Soon', 'Map navigation coming soon');
+  void dialog.alert('Coming Soon', 'Map navigation coming soon');
 }

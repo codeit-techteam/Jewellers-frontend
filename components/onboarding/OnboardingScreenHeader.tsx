@@ -17,7 +17,11 @@ export function OnboardingScreenHeader({ title, onBack }: OnboardingScreenHeader
       onBack();
       return;
     }
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(onboarding)/step5-subscription');
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
 import { clearOnboardingMeta, loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
 import { clearWelcomeSeen, loadWelcomeSeen, setWelcomeSeen } from '@lib/welcomeMeta';
-import { clearAuthToken, setAuthToken } from '@services/api';
+import { clearAuthToken, registerUnauthorizedHandler, setAuthToken } from '@services/api';
+import * as authService from '@services/authService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { User } from '@/types/auth';
 import * as SecureStore from 'expo-secure-store';
@@ -48,109 +49,111 @@ const initialAuthState = {
   hasSeenWelcome: false,
 };
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  ...initialAuthState,
+export const useAuthStore = create<AuthState>((set, get) => {
+  const store = {
+    ...initialAuthState,
 
-  markWelcomeSeen: async () => {
-    await setWelcomeSeen();
-    set({ hasSeenWelcome: true });
-  },
+    markWelcomeSeen: async () => {
+      await setWelcomeSeen();
+      set({ hasSeenWelcome: true });
+    },
 
-  setAuthFlowMode: (mode) => {
-    set({ authMode: mode });
-  },
+    setAuthFlowMode: (mode: AuthFlowMode) => {
+      set({ authMode: mode });
+    },
 
-  setPhoneForOtp: (phone, countryCode) => {
-    set({ phoneNumber: phone, countryCode });
-  },
+    setPhoneForOtp: (phone: string, countryCode: string) => {
+      set({ phoneNumber: phone, countryCode });
+    },
 
-  setAuthSuccess: async (token, user, onboardingStep, isOnboardingComplete) => {
-    await setAuthToken(token);
-    await saveOnboardingMeta({
-      currentOnboardingStep: onboardingStep,
-      isOnboardingComplete,
-    });
+    setAuthSuccess: async (
+      token: string,
+      user: User,
+      onboardingStep: number,
+      isOnboardingComplete: boolean,
+    ) => {
+      await setAuthToken(token);
+      await saveOnboardingMeta({ currentOnboardingStep: onboardingStep, isOnboardingComplete });
 
-    const onboarding = useOnboardingStore.getState();
-    onboarding.hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
-    if (isOnboardingComplete) {
-      onboarding.completeOnboarding();
-    }
+      const onboarding = useOnboardingStore.getState();
+      onboarding.hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
+      if (isOnboardingComplete) {
+        onboarding.completeOnboarding();
+      }
 
-    const { phoneNumber, countryCode } = get();
+      const { phoneNumber, countryCode } = get();
+      await setWelcomeSeen();
 
-    await setWelcomeSeen();
+      set({
+        isAuthenticated: true,
+        token,
+        user,
+        phoneNumber,
+        countryCode,
+        onboardingStep,
+        isOnboardingComplete,
+        hasSeenWelcome: true,
+        authMode: null,
+      });
+    },
 
-    set({
-      isAuthenticated: true,
-      token,
-      user,
-      phoneNumber,
-      countryCode,
-      onboardingStep,
-      isOnboardingComplete,
-      hasSeenWelcome: true,
-      authMode: null,
-    });
-  },
+    logout: async () => {
+      await authService.logout();
+      await clearAuthToken();
+      await clearOnboardingMeta();
+      await clearWelcomeSeen();
+      useOnboardingStore.getState().resetOnboarding();
+      set({ ...initialAuthState, isLoading: false });
+    },
 
-  logout: async () => {
-    await clearAuthToken();
-    await clearOnboardingMeta();
-    await clearWelcomeSeen();
-    useOnboardingStore.getState().resetOnboarding();
-    set({
-      ...initialAuthState,
-      isLoading: false,
-    });
-  },
+    checkPersistedAuth: async () => {
+      try {
+        const storedToken = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
 
-  checkPersistedAuth: async () => {
-    try {
-      const storedToken = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
-      const meta = await loadOnboardingMeta();
-      const hasSeenWelcome = await loadWelcomeSeen();
+        if (!storedToken) {
+          set({ isAuthenticated: false, isLoading: false });
+          return;
+        }
 
-      if (storedToken && meta) {
+        // Validate token and restore user via /auth/me
+        const user = await authService.getMe();
+        const meta = await loadOnboardingMeta();
+        const hasSeenWelcome = await loadWelcomeSeen();
+
+        const onboardingStep = meta?.currentOnboardingStep ?? 1;
+        const isOnboardingComplete = meta?.isOnboardingComplete ?? false;
+
         useOnboardingStore
           .getState()
-          .hydrateOnboardingMeta(meta.currentOnboardingStep, meta.isOnboardingComplete);
+          .hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
 
         set({
           isAuthenticated: true,
           token: storedToken,
-          onboardingStep: meta.currentOnboardingStep,
-          isOnboardingComplete: meta.isOnboardingComplete,
+          user,
+          onboardingStep,
+          isOnboardingComplete,
           hasSeenWelcome,
           isLoading: false,
         });
-        return;
-      }
-
-      if (storedToken && !meta) {
+      } catch {
+        // /auth/me failed (expired/invalid token) — clear everything
         await clearAuthToken();
+        await clearOnboardingMeta();
+        useOnboardingStore.getState().resetOnboarding();
+        set({ isAuthenticated: false, token: null, isLoading: false });
       }
+    },
 
-      useOnboardingStore.getState().resetOnboarding();
+    clearOtpSession: () => {
+      set({ phoneNumber: null, countryCode: null, authMode: null });
+    },
+  };
 
-      set({
-        isAuthenticated: false,
-        token: null,
-        hasSeenWelcome: false,
-        isLoading: false,
-      });
-    } catch {
-      useOnboardingStore.getState().resetOnboarding();
-      set({
-        isAuthenticated: false,
-        token: null,
-        hasSeenWelcome: false,
-        isLoading: false,
-      });
-    }
-  },
+  // Register 401 handler here — avoids circular imports (api → store → service → api)
+  registerUnauthorizedHandler(() => {
+    void store.logout();
+  });
 
-  clearOtpSession: () => {
-    set({ phoneNumber: null, countryCode: null, authMode: null });
-  },
-}));
+  return store;
+});

@@ -1,15 +1,22 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
+import { getProduct } from '@services/inventoryService';
+import type { InventoryProduct } from '@/types/inventory';
 import { useInventoryStore } from '@store/useInventoryStore';
 import { useProfileStore } from '@store/useProfileStore';
 import { formatInr } from '@utils/formatCurrency';
+import { handleApiError } from '@utils/handleApiError';
+import { dialog } from '@utils/dialog';
+import { showShareComingSoonAlert } from '@utils/storeAlerts';
+import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Image,
   Linking,
   Pressable,
@@ -36,21 +43,54 @@ export default function ProductDetailScreen() {
   const micro = width * 0.028;
   const button = width * 0.042;
 
-  const products = useInventoryStore((state) => state.products);
+  const storeProduct = useInventoryStore((state) =>
+    productId ? state.products.find((item) => item.id === productId) : undefined,
+  );
   const incrementWaClick = useInventoryStore((state) => state.incrementWaClick);
   const incrementInquiry = useInventoryStore((state) => state.incrementInquiry);
   const profile = useProfileStore((state) => state.profile);
 
-  const product = products.find((item) => item.id === productId);
+  const [product, setProduct] = useState<InventoryProduct | undefined>(storeProduct);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadProduct = async () => {
+    if (!productId) return;
+    setLoadError(null);
+    try {
+      const fetched = await getProduct(productId);
+      setProduct(fetched);
+    } catch (err) {
+      setLoadError(handleApiError(err));
+    }
+  };
 
   useEffect(() => {
-    if (!productId || !product) {
+    if (!productId) {
       navigateBack(router, returnTo);
+      return;
     }
-  }, [product, productId, returnTo, router]);
+    if (storeProduct) {
+      setProduct(storeProduct);
+      return;
+    }
+    void loadProduct();
+  }, [productId, returnTo, router, storeProduct]);
 
-  if (!productId || !product) {
+  if (!productId) {
     return null;
+  }
+
+  if (loadError && !product) {
+    return (
+      <ErrorScreen
+        message={loadError}
+        onRetry={() => void loadProduct()}
+      />
+    );
+  }
+
+  if (!product) {
+    return <LoadingScreen message="Loading product…" />;
   }
 
   const profilePhone = profile.phone;
@@ -78,7 +118,7 @@ export default function ProductDetailScreen() {
 
   const handleBookAppointment = () => {
     incrementInquiry(product.id);
-    Alert.alert(
+    void dialog.alert(
       'Appointment booking coming soon',
       `We will contact you shortly at ${profilePhone}`,
     );
@@ -110,12 +150,25 @@ export default function ProductDetailScreen() {
         >
           {product.name}
         </Text>
-        <Pressable
-          onPress={() => Alert.alert('Share coming soon')}
-          className="h-10 w-10 items-center justify-center"
-        >
-          <Ionicons name="share-outline" size={width * 0.055} color={colors.NAVY} />
-        </Pressable>
+        <View className="flex-row items-center">
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/inventory/edit',
+                params: { productId },
+              })
+            }
+            className="h-10 w-10 items-center justify-center"
+          >
+            <Ionicons name="create-outline" size={width * 0.05} color={colors.NAVY} />
+          </Pressable>
+          <Pressable
+            onPress={showShareComingSoonAlert}
+            className="h-10 w-10 items-center justify-center"
+          >
+            <Ionicons name="share-outline" size={width * 0.055} color={colors.NAVY} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView

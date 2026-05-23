@@ -6,32 +6,7 @@ export const MOCK_VIEWS_GROWTH_PERCENT = '+12%';
 export const MOCK_MARKETPLACE_PRODUCTS_EXTRA = 154;
 export const MOCK_PLAN_RENEWAL_DATE = 'Oct 12, 2024';
 
-export const INVENTORY_FILTER_CATEGORIES = [
-  'All',
-  'Rings',
-  'Necklaces',
-  'Earrings',
-  'Bracelets',
-  'Gold',
-  'Diamond',
-  'Silver',
-] as const;
-
 export const INVENTORY_DRAFTS_FILTER = 'Drafts' as const;
-
-export const INVENTORY_FORM_CATEGORIES = [
-  'Gold',
-  'Diamond',
-  'Silver',
-  'Platinum',
-  'Pearl',
-  'Rings',
-  'Necklaces',
-  'Earrings',
-  'Bracelets',
-  'Bangles',
-  'Other',
-] as const;
 
 export const PURITY_OPTIONS = [
   '14K (58.5%)',
@@ -49,6 +24,7 @@ export const INITIAL_MOCK_INVENTORY_PRODUCTS: InventoryProduct[] = [
     id: 'inv-001',
     name: 'Solitaire Diamond Ring',
     sku: 'ER-77241-DIA',
+    categoryId: '',
     category: 'Diamond',
     price: 37950,
     weight: 5.4,
@@ -64,6 +40,7 @@ export const INITIAL_MOCK_INVENTORY_PRODUCTS: InventoryProduct[] = [
     id: 'inv-002',
     name: 'Temple Gold Necklace',
     sku: 'NK-2024-042',
+    categoryId: '',
     category: 'Gold',
     price: 59350,
     weight: 48.2,
@@ -79,6 +56,7 @@ export const INITIAL_MOCK_INVENTORY_PRODUCTS: InventoryProduct[] = [
     id: 'inv-003',
     name: 'Filigree Gold Bangles',
     sku: 'BG-2024-019',
+    categoryId: '',
     category: 'Gold',
     price: 25850,
     weight: 18.2,

@@ -1,7 +1,7 @@
 import { colors } from '@constants/colors';
 import { MIN_PRODUCTS_REQUIRED, REVIEW_TIMELINE_STEPS } from '@constants/products';
 import { useFontScale } from '@hooks/useFontScale';
-import { checkStoreStatus } from '@services/storeService';
+import { getStatus } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 10000;
 
 type TimelineStepStatus = 'completed' | 'in_progress' | 'locked';
 
@@ -105,8 +105,8 @@ export default function ReviewPendingScreen() {
         return;
       }
       try {
-        const response = await checkStoreStatus();
-        if (response.status === 'approved') {
+        const response = await getStatus();
+        if (response.storeStatus === 'approved') {
           isApprovedRef.current = true;
           if (intervalRef.current) {
             clearInterval(intervalRef.current);

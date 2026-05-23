@@ -1,4 +1,3 @@
-import type { ProductCategory } from '@/types/product';
 
 export const MOCK_PERFORMANCE_VIEWS = 200;
 export const MOCK_PERFORMANCE_LEADS = 18;
@@ -29,7 +28,7 @@ export const STOREFRONT_VISIT_HOURS = 'Mon-Sat: 10:00 AM - 08:00 PM';
 
 export type MockStorefrontFiller = {
   name: string;
-  category: ProductCategory;
+  category: string;
   price: number;
   imageUri: string;
 };

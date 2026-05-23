@@ -1,12 +1,16 @@
 export function matchesCategoryFilter(
-  product: { category: string; name: string },
-  selectedCategory: string,
+  product: { category: string; categoryId?: string; name: string },
+  selectedCategoryId: string,
 ): boolean {
-  if (selectedCategory === 'All' || selectedCategory === 'All Collections') {
+  if (selectedCategoryId === 'All' || selectedCategoryId === 'All Collections') {
     return true;
   }
 
-  const needle = selectedCategory.toLowerCase();
+  if (product.categoryId && product.categoryId === selectedCategoryId) {
+    return true;
+  }
+
+  const needle = selectedCategoryId.toLowerCase();
   return (
     product.category.toLowerCase() === needle ||
     product.name.toLowerCase().includes(needle)

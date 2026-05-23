@@ -21,8 +21,9 @@ export function PlanCard({
   isFreeLoading = false,
 }: PlanCardProps) {
   const { width, h2, body, label, button } = useFontScale();
-  const isFree = plan.id === 'free';
-  const isPro = plan.id === 'pro';
+  // Use price and isBestValue — plan IDs are backend UUIDs, not fixed slugs
+  const isFree = plan.monthlyPrice === 0;
+  const isPro = plan.isBestValue === true;
 
   const borderColor = isSelected ? colors.NAVY : colors.BORDER;
   const shadowStyle =

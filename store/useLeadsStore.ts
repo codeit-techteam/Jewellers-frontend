@@ -1,4 +1,3 @@
-import { INITIAL_MOCK_LEADS } from '@constants/leads';
 import type { Lead, LeadStatus } from '@/types/leads';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -26,7 +25,7 @@ export function isUpcomingLead(lead: Lead): boolean {
 }
 
 export const useLeadsStore = create<LeadsStoreState>((set) => ({
-  leads: INITIAL_MOCK_LEADS,
+  leads: [],
   activeFilter: 'all',
   searchQuery: '',
 
@@ -43,7 +42,7 @@ export const useLeadsStore = create<LeadsStoreState>((set) => ({
 
   resetToInitial: () =>
     set({
-      leads: INITIAL_MOCK_LEADS,
+      leads: [],
       activeFilter: 'all',
       searchQuery: '',
     }),

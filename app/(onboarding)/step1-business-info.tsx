@@ -11,7 +11,8 @@ import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
-import { ApiError } from '@services/api';
+import { handleApiError } from '@utils/handleApiError';
+import { dialog } from '@utils/dialog';
 import { submitBusinessInfo } from '@services/onboardingService';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
@@ -25,7 +26,6 @@ import { Controller, useForm } from 'react-hook-form';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -105,17 +105,14 @@ export default function Step1BusinessInfoScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Location permission denied',
-          'Please enter address manually.',
-        );
+        void dialog.alert('Location permission denied', 'Please enter address manually.');
         return;
       }
 
       const position = await Location.getCurrentPositionAsync();
       const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
       if (!mapsKey) {
-        Alert.alert(
+        void dialog.alert(
           'Google Maps API key not configured',
           'Please enter address manually.',
         );
@@ -126,20 +123,20 @@ export default function Step1BusinessInfoScreen() {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${mapsKey}`;
       const response = await fetch(url);
       if (!response.ok) {
-        Alert.alert('Could not fetch location', 'Please enter manually.');
+        void dialog.alert('Could not fetch location', 'Please enter manually.');
         return;
       }
 
       const data = (await response.json()) as GeocodeResponse;
       const formattedAddress = data.results?.[0]?.formatted_address;
       if (!formattedAddress) {
-        Alert.alert('Could not fetch location', 'Please enter manually.');
+        void dialog.alert('Could not fetch location', 'Please enter manually.');
         return;
       }
 
       setValue('businessAddress', formattedAddress, { shouldValidate: true });
     } catch {
-      Alert.alert('Could not fetch location', 'Please enter manually.');
+      void dialog.alert('Could not fetch location', 'Please enter manually.');
     } finally {
       setIsFetchingLocation(false);
     }
@@ -159,9 +156,7 @@ export default function Step1BusinessInfoScreen() {
       setStep1Data(payload);
       router.push('/(onboarding)/step2-gst');
     } catch (error) {
-      const message =
-        error instanceof ApiError ? error.message : 'Failed to save. Please try again.';
-      setApiError(message);
+      setApiError(handleApiError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -197,8 +192,8 @@ export default function Step1BusinessInfoScreen() {
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
       >
         <ScrollView
           className="flex-1 px-5"
