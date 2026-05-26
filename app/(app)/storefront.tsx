@@ -74,12 +74,20 @@ export default function StorefrontScreen() {
   const tagline = store?.tagline ?? '';
   const aboutText =
     store?.description || store?.tagline || STOREFRONT_ABOUT_BODY;
-  const storePhone = store?.phone || profile.phone;
   const visitAddress = store?.address || profile.address;
+  const storeLocality = store?.locality ?? '';
   const visitHours =
     store?.openingTime && store?.closingTime
       ? `${store.openingTime} – ${store.closingTime}`
       : STOREFRONT_VISIT_HOURS;
+  const workingDaysText = (() => {
+    const days = store?.workingDays ?? [];
+    if (days.length === 0) return '';
+    const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const sorted = [...days].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    if (sorted.length === 7) return 'Mon – Sun';
+    return `${sorted[0]} – ${sorted[sorted.length - 1]}`;
+  })();
 
   const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
 
@@ -117,15 +125,6 @@ export default function StorefrontScreen() {
       ),
     [displayProducts, selectedCategory],
   );
-
-  const handleCall = () => {
-    void Linking.openURL(`tel:${storePhone}`);
-  };
-
-  const handleWhatsApp = () => {
-    const phone = storePhone.replace(/\D/g, '');
-    void Linking.openURL(`https://wa.me/${phone}`);
-  };
 
   const handleMap = () => {
     const encoded = encodeURIComponent(visitAddress);
@@ -241,40 +240,16 @@ export default function StorefrontScreen() {
             <Text className="mt-3 text-center font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
               {storeName}
             </Text>
+            {storeLocality ? (
+              <Text className="mt-1 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+                📍 {storeLocality}
+              </Text>
+            ) : null}
             <Text className="mt-2 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
               ⭐ {STOREFRONT_RATING_LABEL} • {STOREFRONT_ESTABLISHED_LABEL}
             </Text>
           </View>
 
-          <View className="mt-4 flex-row" style={{ gap: width * 0.02 }}>
-            <Pressable
-              onPress={handleCall}
-              className="flex-1 items-center justify-center rounded-xl border py-3"
-              style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-            >
-              <Text className="font-semibold" style={{ fontSize: micro, color: colors.NAVY }}>
-                📞 CALL
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleWhatsApp}
-              className="flex-1 items-center justify-center rounded-xl border py-3"
-              style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-            >
-              <Text className="font-semibold" style={{ fontSize: micro, color: colors.NAVY }}>
-                💬 WHATSAPP
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleMap}
-              className="flex-1 items-center justify-center rounded-xl border py-3"
-              style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-            >
-              <Text className="font-semibold" style={{ fontSize: micro, color: colors.NAVY }}>
-                🗺 MAP
-              </Text>
-            </Pressable>
-          </View>
         </View>
 
         <View style={{ flexGrow: 0, marginTop: 16 }}>
@@ -320,12 +295,7 @@ export default function StorefrontScreen() {
             New Arrivals
           </Text>
           <Pressable
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/all-products',
-                ...(returnTo ? { params: { returnTo } } : {}),
-              })
-            }
+            onPress={() => router.push('/(app)/inventory')}
           >
             <Text className="font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
               SEE ALL
@@ -410,6 +380,7 @@ export default function StorefrontScreen() {
                 </Text>
                 <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
                   {visitHours}
+                  {workingDaysText ? `  ·  ${workingDaysText}` : ''}
                 </Text>
               </View>
               <Pressable

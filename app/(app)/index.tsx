@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { useRouter } from 'expo-router';
+import { RETURN_TO_HOME } from '@lib/navigateBack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
@@ -355,7 +356,7 @@ export default function DashboardScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.push('/(app)/inventory/add')}
+          onPress={() => router.push({ pathname: '/(app)/inventory/add', params: { returnTo: RETURN_TO_HOME } })}
           className="mb-2 flex-row items-center rounded-xl border p-4"
           style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
         >

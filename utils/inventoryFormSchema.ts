@@ -28,7 +28,17 @@ const baseFields = {
       const parsed = Number(value);
       return !Number.isNaN(parsed) && parsed >= 0;
     }, 'Enter a valid value'),
-  additionalDetails: z.string().optional(),
+  // description replaces additionalDetails
+  description: z.string().optional(),
+  discountPercent: z
+    .string()
+    .optional()
+    .refine((v) => {
+      if (!v || !v.trim()) return true;
+      const n = Number(v);
+      return !Number.isNaN(n) && n >= 0 && n <= 100;
+    }, 'Enter 0–100'),
+  collectionName: z.string().optional(),
 };
 
 export const inventoryProductStrictSchema = z.object({
@@ -49,7 +59,9 @@ export const inventoryProductDraftSchema = z.object({
   purity: z.string().optional(),
   makingChargesType: z.enum(['percentage', 'flat']),
   makingChargesValue: z.string().optional(),
-  additionalDetails: z.string().optional(),
+  description: z.string().optional(),
+  discountPercent: z.string().optional(),
+  collectionName: z.string().optional(),
 });
 
 export type InventoryFormValues = {
@@ -59,5 +71,7 @@ export type InventoryFormValues = {
   purity: string;
   makingChargesType: 'percentage' | 'flat';
   makingChargesValue: string;
-  additionalDetails: string;
+  description: string;
+  discountPercent: string;
+  collectionName: string;
 };

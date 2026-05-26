@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { InventoryProduct } from '@/types/inventory';
 import { calculateProductPrice } from '@utils/calculateProductPrice';
 import { handleApiError } from '@utils/handleApiError';
+import { navigateBack } from '@lib/navigateBack';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +24,7 @@ export default function EditProductScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const h2 = width * 0.048;
-  const { productId } = useLocalSearchParams<{ productId: string }>();
+  const { productId, returnTo } = useLocalSearchParams<{ productId: string; returnTo?: string }>();
 
   const queryClient = useQueryClient();
   const products = useInventoryStore((state) => state.products);
@@ -85,7 +86,7 @@ export default function EditProductScreen() {
       const saved = await updateProductApi(product.id, { ...updated, price, isDraft: false });
       updateProduct(product.id, saved);
       void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
-      router.back();
+      navigateBack(router, returnTo);
     } catch (err) {
       void dialog.alert('Error', handleApiError(err));
     } finally {
@@ -103,7 +104,7 @@ export default function EditProductScreen() {
           await removeProductApi(product.id);
           removeProduct(product.id);
           void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
-          router.back();
+          navigateBack(router, returnTo);
         } catch (err) {
           void dialog.alert('Error', handleApiError(err));
         } finally {
@@ -118,7 +119,7 @@ export default function EditProductScreen() {
       <StatusBar style="dark" />
       <View className="mb-2 flex-row items-center px-5">
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => navigateBack(router, returnTo)}
           className="h-10 w-10 items-center justify-center rounded-full"
           style={{ backgroundColor: colors.SURFACE_MUTED }}
         >

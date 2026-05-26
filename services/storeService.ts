@@ -16,6 +16,7 @@ function fileNameFromUri(uri: string, fallback: string): string {
 function toSnakeUpdateBody(data: UpdateStoreData): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   if (data.description !== undefined) body.description = data.description;
+  if (data.locality !== undefined) body.locality = data.locality;
   if (data.phoneNumber !== undefined) body.phone_number = data.phoneNumber;
   if (data.whatsappNumber !== undefined) body.whatsapp_number = data.whatsappNumber;
   if (data.openingTime !== undefined) body.opening_time = data.openingTime;

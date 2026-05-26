@@ -13,7 +13,7 @@ export function getResumeRoute(
     return '/(app)';
   }
 
-  if (storeStatus === 'review') {
+  if (storeStatus === 'review' || storeStatus === 'rejected') {
     return '/(onboarding)/review-pending';
   }
 

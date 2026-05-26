@@ -1,9 +1,10 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
+import { LeadDetailModal } from '@components/ui/LeadDetailModal';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { APP_BRAND_NAME, LEAD_FILTER_OPTIONS } from '@constants/leads';
 import { colors } from '@constants/colors';
-import { downloadLeadsReport, getLeads, updateLeadStatusApi } from '@services/leadsService';
+import { getLeads, updateLeadStatusApi } from '@services/leadsService';
 import {
   countUpcomingLeads,
   getFilteredLeads,
@@ -12,13 +13,13 @@ import {
 } from '@store/useLeadsStore';
 import { useProfileStore } from '@store/useProfileStore';
 import type { Lead } from '@/types/leads';
-import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
+import { getLeadStatusBadgeStyle } from '@utils/leadHelpers';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
-import { Image, Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -141,6 +142,8 @@ export default function LeadsScreen() {
   const label = width * 0.032;
   const micro = width * 0.028;
 
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
   const profile = useProfileStore((state) => state.profile);
   const leads = useLeadsStore((state) => state.leads);
   const activeFilter = useLeadsStore((state) => state.activeFilter);
@@ -186,50 +189,14 @@ export default function LeadsScreen() {
     })();
   };
 
-  const showContactOptions = (lead: Lead) => {
-    const phone = normalizePhoneForLink(lead.phone);
-    const waPhone = phone.replace(/\D/g, '');
-    const message = encodeURIComponent(
-      `Hi ${lead.name}, confirming your appointment on ${lead.appointmentDate} at ${lead.appointmentTime} for ${lead.serviceRequested}`,
-    );
-
-    void dialog.alert('Contact Lead', lead.name, [
-      {
-        text: '📞 Call',
-        onPress: () => void Linking.openURL(`tel:${phone}`),
-      },
-      {
-        text: '💬 WhatsApp',
-        onPress: () => void Linking.openURL(`https://wa.me/${waPhone}?text=${message}`),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const openLeadModal = (lead: Lead) => setSelectedLead(lead);
+  const closeLeadModal = () => setSelectedLead(null);
 
   const confirmMarkVisited = (lead: Lead) => {
     void dialog.confirm('Mark as Visited', `Mark ${lead.name} as Visited?`, {
       confirmText: 'Confirm',
       onConfirm: () => handleStatusUpdate(lead.id, 'visited'),
     });
-  };
-
-  const showLeadDetails = (lead: Lead) => {
-    void dialog.alert(
-      lead.name,
-      `Phone: ${lead.phone}\n\nAppointment: ${lead.appointmentDate} at ${lead.appointmentTime}\n\nService: ${lead.serviceRequested}\n\nStatus: ${lead.status}`,
-      [{ text: 'Close', style: 'cancel' }],
-    );
-  };
-
-  const handleDownloadReport = () => {
-    void (async () => {
-      try {
-        await downloadLeadsReport();
-        void dialog.alert('Coming Soon', 'Export feature coming soon');
-      } catch (err) {
-        void dialog.alert('Error', handleApiError(err));
-      }
-    })();
   };
 
   if (isPending && leads.length === 0) {
@@ -242,6 +209,12 @@ export default function LeadsScreen() {
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
+      <LeadDetailModal
+        lead={selectedLead}
+        visible={selectedLead !== null}
+        onClose={closeLeadModal}
+        onMarkVisited={confirmMarkVisited}
+      />
       <StatusBar style="dark" />
 
       <View className="flex-row items-center px-5 pb-3">
@@ -329,30 +302,36 @@ export default function LeadsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
       >
-        {filteredLeads.map((lead) => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            body={body}
-            label={label}
-            micro={micro}
-            onContactNow={() => showContactOptions(lead)}
-            onMarkVisited={() => confirmMarkVisited(lead)}
-            onViewDetails={() => showLeadDetails(lead)}
-          />
-        ))}
+        {filteredLeads.length === 0 ? (
+          <View className="items-center py-12">
+            <Ionicons name="people-outline" size={48} color={colors.BORDER} />
+            <Text className="mt-3 font-semibold" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+              No leads found
+            </Text>
+            <Text className="mt-1 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+              {searchQuery ? 'Try a different search term' : 'Leads will appear here when customers book appointments'}
+            </Text>
+          </View>
+        ) : (
+          filteredLeads.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              body={body}
+              label={label}
+              micro={micro}
+              onContactNow={() => openLeadModal(lead)}
+              onMarkVisited={() => confirmMarkVisited(lead)}
+              onViewDetails={() => openLeadModal(lead)}
+            />
+          ))
+        )}
 
-        <Text className="mt-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-          Showing {filteredLeads.length} of {leads.length} leads found for current filters.
-        </Text>
-        <Pressable onPress={handleDownloadReport} className="mt-3 items-center">
-          <Text
-            className="font-bold underline"
-            style={{ fontSize: label, color: colors.NAVY }}
-          >
-            Download Leads Report
+        {filteredLeads.length > 0 && (
+          <Text className="mt-2 mb-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+            Showing {filteredLeads.length} of {leads.length} leads
           </Text>
-        </Pressable>
+        )}
       </ScrollView>
     </View>
   );

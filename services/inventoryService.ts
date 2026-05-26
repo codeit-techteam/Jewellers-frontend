@@ -17,6 +17,16 @@ type BackendCategoryJoin = {
   slug?: string | null;
 };
 
+type BackendPriceBreakup = {
+  gold?: number;
+  gemstone?: number;
+  makingCharge?: number;
+  gst?: number;
+  total?: number;
+};
+
+type BackendSpecifications = Record<string, string | number | null | undefined>;
+
 type BackendProduct = {
   id: string;
   name: string;
@@ -33,8 +43,8 @@ type BackendProduct = {
   is_draft?: boolean;
   created_at?: string;
   additional_details?: string | null;
-  /** Category text is stored here when there is no dedicated TEXT column. */
-  specifications?: { category?: string } | null;
+  description?: string | null;
+  specifications?: BackendSpecifications | null;
   product_analytics?:
     | {
         views?: number;
@@ -53,8 +63,18 @@ type BackendProduct = {
         wa_clicks?: number;
       }>;
   product_images?: Array<{ image_url?: string; url?: string; is_primary?: boolean }>;
-  /** Can be an array of URL strings (from products.images jsonb) or image objects (from product_images join). */
+  /** Can be an array of URL strings (from products.images jsonb) or image objects. */
   images?: Array<BackendProductImage | string>;
+  // ── enrichment fields ────────────────────────────────────────────────────
+  gender?: string | null;
+  occasion?: string | null;
+  style?: string | null;
+  available_sizes?: string[] | null;
+  available_metals?: string[] | null;
+  discount_percentage?: number | null;
+  price_breakup?: BackendPriceBreakup | null;
+  collection_name?: string | null;
+  video_url?: string | null;
 };
 
 function mapAnalytics(
@@ -92,6 +112,32 @@ function mapProduct(bp: BackendProduct): InventoryProduct {
     bp.category ??
     '';
 
+  const desc = bp.description ?? bp.additional_details ?? undefined;
+
+  const pbRaw = bp.price_breakup;
+  const priceBreakup = pbRaw
+    ? {
+        gold: Number(pbRaw.gold ?? 0),
+        gemstone: Number(pbRaw.gemstone ?? 0),
+        makingCharge: Number(pbRaw.makingCharge ?? 0),
+        gst: Number(pbRaw.gst ?? 0),
+        total: Number(pbRaw.total ?? 0),
+      }
+    : undefined;
+
+  const specsRaw = bp.specifications;
+  const specifications =
+    specsRaw &&
+    (specsRaw.carat || specsRaw.dimensions || specsRaw.certification || specsRaw.metal || specsRaw.weight)
+      ? {
+          metal: specsRaw.metal ? String(specsRaw.metal) : undefined,
+          weight: specsRaw.weight ? String(specsRaw.weight) : undefined,
+          carat: specsRaw.carat ? String(specsRaw.carat) : undefined,
+          dimensions: specsRaw.dimensions ? String(specsRaw.dimensions) : undefined,
+          certification: specsRaw.certification ? String(specsRaw.certification) : undefined,
+        }
+      : undefined;
+
   return {
     id: bp.id,
     name: bp.name,
@@ -108,7 +154,18 @@ function mapProduct(bp: BackendProduct): InventoryProduct {
     analytics: mapAnalytics(bp.product_analytics),
     isDraft: bp.is_draft ?? false,
     createdAt: bp.created_at ?? new Date().toISOString(),
-    additionalDetails: bp.additional_details ?? undefined,
+    additionalDetails: desc,
+    description: desc,
+    gender: bp.gender ?? undefined,
+    occasion: bp.occasion ?? undefined,
+    style: bp.style ?? undefined,
+    availableSizes: bp.available_sizes ?? undefined,
+    availableMetals: bp.available_metals ?? undefined,
+    discountPercent: bp.discount_percentage ?? undefined,
+    priceBreakup,
+    specifications,
+    collectionName: bp.collection_name ?? undefined,
+    videoUrl: bp.video_url ?? undefined,
   };
 }
 
@@ -176,6 +233,38 @@ export async function uploadImages(
   }
 }
 
+/**
+ * Upload a short product video using native fetch + FormData.
+ * Backend: POST /products/:id/video — accepts video/mp4 (max 50MB).
+ */
+export async function uploadProductVideo(productId: string, videoUri: string): Promise<void> {
+  const formData = new FormData();
+  formData.append('video', {
+    uri: videoUri,
+    type: 'video/mp4',
+    name: `product_video_${Date.now()}.mp4`,
+  } as unknown as Blob);
+
+  const token = await SecureStore.getItemAsync('auth_token');
+
+  const response = await fetch(`${config.apiUrl}/products/${productId}/video`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let message = 'Failed to upload video';
+    try {
+      const json = (await response.json()) as { message?: string; data?: { message?: string } };
+      message = json?.data?.message ?? json?.message ?? message;
+    } catch {
+      // non-JSON response body
+    }
+    throw new ApiError(message, response.status);
+  }
+}
+
 function getLocalImageUris(data: AddProductForm): string[] {
   const uris: string[] = [];
   if (data.imageUris?.length) {
@@ -196,8 +285,17 @@ function buildCreateBody(data: AddProductForm, isDraft: boolean) {
     purity: data.purity,
     makingChargesType: data.makingChargesType,
     makingChargesValue: data.makingChargesValue,
-    description: data.additionalDetails,
+    description: data.description ?? data.additionalDetails,
     isDraft,
+    gender: data.gender,
+    occasion: data.occasion,
+    style: data.style,
+    availableSizes: data.availableSizes,
+    availableMetals: data.availableMetals,
+    discountPercent: data.discountPercent,
+    priceBreakup: data.priceBreakup,
+    specifications: data.specifications,
+    collectionName: data.collectionName,
   };
 }
 
@@ -205,8 +303,11 @@ async function createProduct(data: AddProductForm, isDraft: boolean): Promise<In
   const { data: created } = await api.post<BackendProduct>('/products', buildCreateBody(data, isDraft));
   const localUris = getLocalImageUris(data);
   if (localUris.length > 0) {
-    // Use native fetch for reliable multipart uploads in React Native
     await uploadImages(created.id, localUris);
+  }
+  // Upload video if a local URI was provided
+  if (data.videoUri && !data.videoUri.startsWith('http')) {
+    await uploadProductVideo(created.id, data.videoUri);
   }
   const { data: full } = await api.get<BackendProduct>(`/products/${created.id}`);
   return mapProduct(full);
@@ -233,7 +334,6 @@ export async function saveDraftProduct(data: AddProductForm): Promise<InventoryP
 /**
  * Simplified product save for the onboarding step5 form.
  * Only requires name, category, price, and a single local image URI.
- * Weight and purity are optional and default to null on the backend.
  */
 export async function saveSimpleProduct(data: {
   name: string;
@@ -242,7 +342,6 @@ export async function saveSimpleProduct(data: {
   imageUri: string;
   imageFileName?: string;
 }): Promise<InventoryProduct> {
-  // Step 1 — create the product record (JSON, no FormData)
   const { data: created } = await api.post<BackendProduct>('/products', {
     name: data.name,
     categoryId: data.categoryId,
@@ -250,13 +349,11 @@ export async function saveSimpleProduct(data: {
     isDraft: false,
   });
 
-  // Step 2 — upload the image via native fetch (reliable multipart in RN)
   if (data.imageUri) {
     const names = data.imageFileName ? [data.imageFileName] : undefined;
     await uploadImages(created.id, [data.imageUri], names);
   }
 
-  // Step 3 — re-fetch the full product so images are resolved to public URLs
   const { data: full } = await api.get<BackendProduct>(`/products/${created.id}`);
   return mapProduct(full);
 }
@@ -272,17 +369,33 @@ export async function updateProductApi(
   if (data.purity !== undefined) body.purity = data.purity;
   if (data.makingChargesType !== undefined) body.makingChargesType = data.makingChargesType;
   if (data.makingChargesValue !== undefined) body.makingChargesValue = data.makingChargesValue;
-  if (data.additionalDetails !== undefined) body.description = data.additionalDetails;
+  if (data.description !== undefined) body.description = data.description;
+  if (data.additionalDetails !== undefined && body.description === undefined) {
+    body.description = data.additionalDetails;
+  }
   if (data.isDraft !== undefined) body.isDraft = data.isDraft;
   if (data.price !== undefined) body.price = data.price;
+  // ── enrichment fields ──────────────────────────────────────────────────────
+  if (data.gender !== undefined) body.gender = data.gender || null;
+  if (data.occasion !== undefined) body.occasion = data.occasion || null;
+  if (data.style !== undefined) body.style = data.style || null;
+  if (data.availableSizes !== undefined) body.availableSizes = data.availableSizes;
+  if (data.availableMetals !== undefined) body.availableMetals = data.availableMetals;
+  if (data.discountPercent !== undefined) body.discountPercent = data.discountPercent;
+  if (data.priceBreakup !== undefined) body.priceBreakup = data.priceBreakup;
+  if (data.specifications !== undefined) body.specifications = data.specifications;
+  if (data.collectionName !== undefined) body.collectionName = data.collectionName || null;
 
   try {
     const { data: updated } = await api.put<BackendProduct>(`/products/${id}`, body);
 
     const allUris = [...(data.imageUris ?? []), ...(data.imageUri ? [data.imageUri] : [])];
     const localUris = allUris.filter((u) => u && !u.startsWith('http'));
-    if (localUris.length > 0) {
-      await uploadImages(id, localUris);
+    const hasNewVideo = data.videoUri && !data.videoUri.startsWith('http');
+
+    if (localUris.length > 0 || hasNewVideo) {
+      if (localUris.length > 0) await uploadImages(id, localUris);
+      if (hasNewVideo) await uploadProductVideo(id, data.videoUri!);
       const { data: full } = await api.get<BackendProduct>(`/products/${id}`);
       return mapProduct(full);
     }

@@ -9,6 +9,7 @@ import { showComingSoonAlert, showShareComingSoonAlert } from '@utils/storeAlert
 import { Ionicons } from '@expo/vector-icons';
 import {
   RETURN_TO_MY_LIVE_STORE,
+  RETURN_TO_MY_LIVE_STORE_FROM_PROFILE,
   RETURN_TO_PROFILE,
   navigateBack,
 } from '@lib/navigateBack';
@@ -63,6 +64,11 @@ export default function MyLiveStoreScreen() {
   const logoUri = store?.logoUrl ?? null;
   const coverImageUri = store?.coverImageUrl ?? null;
   const storeInitial = storeName.trim().charAt(0).toUpperCase() || 'S';
+  const storeLocality = store?.locality ?? '';
+  const storeHours =
+    store?.openingTime && store?.closingTime
+      ? `${store.openingTime} – ${store.closingTime}`
+      : '';
   const productCount = activeProducts.length;
   const planLabel = store?.planName ?? 'Free Plan';
   const isLive = store?.storeStatus === 'approved';
@@ -82,9 +88,11 @@ export default function MyLiveStoreScreen() {
       return;
     }
     if (action.route) {
+      // Always return to My Live Store when the sub-page goes back,
+      // regardless of how My Live Store itself was opened (e.g. from Profile).
       router.push({
         pathname: action.route,
-        ...(returnTo ? { params: { returnTo } } : {}),
+        params: { returnTo: RETURN_TO_MY_LIVE_STORE },
       } as Href);
     }
   };
@@ -184,6 +192,11 @@ export default function MyLiveStoreScreen() {
                       <Text className="font-bold" style={{ fontSize: h2, color: colors.WHITE }}>
                         {storeName}
                       </Text>
+                      {storeLocality ? (
+                        <Text style={{ fontSize: micro, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
+                          📍 {storeLocality}
+                        </Text>
+                      ) : null}
                       <View className="mt-1 flex-row items-center">
                         <View
                           className="mr-2 rounded-full"
@@ -195,6 +208,7 @@ export default function MyLiveStoreScreen() {
                         />
                         <Text style={{ fontSize: label, color: colors.WHITE }}>
                           {isLive ? 'Store is Live' : store?.storeStatus ?? 'Pending'}
+                          {storeHours ? `  ·  ${storeHours}` : ''}
                         </Text>
                       </View>
                     </View>
@@ -244,6 +258,11 @@ export default function MyLiveStoreScreen() {
                     <Text className="font-bold" style={{ fontSize: h2, color: colors.WHITE }}>
                       {storeName}
                     </Text>
+                    {storeLocality ? (
+                      <Text style={{ fontSize: micro, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
+                        📍 {storeLocality}
+                      </Text>
+                    ) : null}
                     <View className="mt-1 flex-row items-center">
                       <View
                         className="mr-2 rounded-full"
@@ -255,6 +274,7 @@ export default function MyLiveStoreScreen() {
                       />
                       <Text style={{ fontSize: label, color: colors.WHITE }}>
                         {isLive ? 'Store is Live' : store?.storeStatus ?? 'Pending'}
+                        {storeHours ? `  ·  ${storeHours}` : ''}
                       </Text>
                     </View>
                   </View>
@@ -278,10 +298,12 @@ export default function MyLiveStoreScreen() {
             onPress={() =>
               router.push({
                 pathname: '/(app)/storefront',
-                params:
-                  returnTo === RETURN_TO_PROFILE
-                    ? { returnTo: RETURN_TO_MY_LIVE_STORE }
-                    : undefined,
+                params: {
+                  returnTo:
+                    returnTo === RETURN_TO_PROFILE
+                      ? RETURN_TO_MY_LIVE_STORE_FROM_PROFILE
+                      : RETURN_TO_MY_LIVE_STORE,
+                },
               })
             }
             className="rounded-full border px-4 py-2"

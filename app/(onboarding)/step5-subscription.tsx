@@ -9,7 +9,7 @@ import { handleApiError } from '@utils/handleApiError';
 import { getPlans } from '@services/paymentService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Plan } from '@/types/payment';
-import { navigateBack } from '@lib/navigateBack';
+import { navigateBack, RETURN_TO_PROFILE } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -37,14 +37,17 @@ export default function Step5SubscriptionScreen() {
 
     async function init() {
       // Guard: if the user already completed subscription (step >= 6), skip straight to products.
-      try {
-        const status = await getStatus();
-        if (status.onboardingStep >= 6) {
-          router.replace('/(onboarding)/step5-products');
-          return;
+      // Skip this redirect when accessed from the profile (manage-subscription context).
+      if (returnTo !== RETURN_TO_PROFILE) {
+        try {
+          const status = await getStatus();
+          if (status.onboardingStep >= 6) {
+            router.replace('/(onboarding)/step5-products');
+            return;
+          }
+        } catch {
+          // Status check failed — continue to show plans so the user isn't stuck.
         }
-      } catch {
-        // Status check failed — continue to show plans so the user isn't stuck.
       }
 
       try {

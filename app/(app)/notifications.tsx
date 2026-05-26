@@ -8,6 +8,7 @@ import {
 } from '@services/notificationsService';
 import type { AppNotification } from '@/types/notifications';
 import { handleApiError } from '@utils/handleApiError';
+import { useOnboardingStore } from '@store/useOnboardingStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -126,6 +127,8 @@ export default function NotificationsScreen() {
   const label = width * 0.032;
   const micro = width * 0.028;
 
+  const storeStatus = useOnboardingStore((state) => state.storeStatus);
+
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('All');
   const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
 
@@ -167,6 +170,19 @@ export default function NotificationsScreen() {
   const deleteNotification = (id: string) => {
     swipeableRefs.current.get(id)?.close();
     swipeableRefs.current.delete(id);
+  };
+
+  const handleNotificationPress = (item: AppNotification) => {
+    handleToggleRead(item.id);
+    if (item.rawType === 'approval') {
+      if (storeStatus === 'approved') {
+        router.push('/(app)');
+      } else {
+        router.push('/(onboarding)/review-pending');
+      }
+    } else if (item.rawType === 'lead') {
+      router.push('/(app)/leads');
+    }
   };
 
   const closeOtherSwipeables = (openId: string) => {
@@ -283,7 +299,7 @@ export default function NotificationsScreen() {
               body={body}
               label={label}
               micro={micro}
-              onPress={() => handleToggleRead(item.id)}
+              onPress={() => handleNotificationPress(item)}
               onDelete={() => deleteNotification(item.id)}
               onSwipeOpen={() => closeOtherSwipeables(item.id)}
               swipeableRef={(ref) => {

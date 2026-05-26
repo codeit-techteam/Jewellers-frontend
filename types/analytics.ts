@@ -1,4 +1,4 @@
-export type AnalyticsRange = 'today' | 'yesterday' | '7days' | '30days';
+export type AnalyticsRange = 'today' | 'yesterday' | '7days' | '30days' | 'this_month';
 
 export type AnalyticsOverview = {
   views: number;

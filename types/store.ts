@@ -13,6 +13,7 @@ export type StoreProfile = {
   businessName: string;
   ownerName: string;
   address: string;
+  locality: string;
   phone: string;
   whatsappNumber: string;
   logoUrl: string | null;
@@ -33,6 +34,7 @@ export type StoreProfile = {
 
 export type UpdateStoreData = {
   description?: string;
+  locality?: string;
   phoneNumber?: string;
   whatsappNumber?: string;
   openingTime?: string;
@@ -73,6 +75,7 @@ export type BackendStore = {
   name?: string;
   owner_name?: string;
   address?: string;
+  location?: string | null;
   logo_url?: string | null;
   cover_image_url?: string | null;
   store_tagline?: string;
@@ -124,6 +127,7 @@ export function mapBackendStore(boutique: BackendStore): StoreProfile {
     businessName: boutique.name ?? '',
     ownerName: boutique.owner_name ?? '',
     address: boutique.address ?? '',
+    locality: boutique.location ?? '',
     phone: boutique.phone_number ?? '',
     whatsappNumber: boutique.whatsapp_number ?? boutique.phone_number ?? '',
     logoUrl: boutique.logo_url ?? null,

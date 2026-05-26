@@ -51,6 +51,7 @@ export function mapBackendNotification(row: BackendNotification): AppNotificatio
   return {
     id: row.id,
     type: uiType,
+    rawType: row.type,
     title: row.title,
     body: row.body,
     time: formatRelativeTime(row.created_at),

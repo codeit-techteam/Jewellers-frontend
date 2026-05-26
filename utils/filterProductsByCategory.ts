@@ -10,9 +10,14 @@ export function matchesCategoryFilter(
     return true;
   }
 
-  const needle = selectedCategoryId.toLowerCase();
-  return (
-    product.category.toLowerCase() === needle ||
-    product.name.toLowerCase().includes(needle)
-  );
+  const needle = selectedCategoryId.toLowerCase().trim();
+  const productCategory = product.category.toLowerCase().trim();
+
+  // Exact match
+  if (productCategory === needle) return true;
+
+  // Handle singular/plural variants (e.g. "ring" ↔ "rings", "necklace" ↔ "necklaces")
+  const needleSingular = needle.endsWith('s') ? needle.slice(0, -1) : needle;
+  const categorySingular = productCategory.endsWith('s') ? productCategory.slice(0, -1) : productCategory;
+  return needleSingular === categorySingular;
 }

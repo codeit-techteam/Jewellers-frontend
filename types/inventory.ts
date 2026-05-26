@@ -7,6 +7,22 @@ export type ProductAnalytics = {
 
 export type MakingChargesType = 'percentage' | 'flat';
 
+export type PriceBreakup = {
+  gold: number;
+  gemstone: number;
+  makingCharge: number;
+  gst: number;
+  total: number;
+};
+
+export type ProductSpecifications = {
+  metal?: string;
+  weight?: string;
+  carat?: string;
+  dimensions?: string;
+  certification?: string;
+};
+
 export type InventoryProduct = {
   id: string;
   name: string;
@@ -24,7 +40,21 @@ export type InventoryProduct = {
   analytics: ProductAnalytics;
   isDraft: boolean;
   createdAt: string;
+  /** Legacy alias — same as description */
   additionalDetails?: string;
+  // ── enrichment fields ───────────────────────────────────────────────────
+  description?: string;
+  gender?: string;
+  occasion?: string;
+  style?: string;
+  availableSizes?: string[];
+  availableMetals?: string[];
+  discountPercent?: number;
+  priceBreakup?: PriceBreakup;
+  specifications?: ProductSpecifications;
+  collectionName?: string;
+  videoUri?: string;
+  videoUrl?: string;
 };
 
 export type AddProductForm = {
@@ -36,7 +66,21 @@ export type AddProductForm = {
   makingChargesValue: number;
   imageUri: string;
   imageUris?: string[];
+  /** Legacy alias — same as description */
   additionalDetails?: string;
+  // ── enrichment fields ───────────────────────────────────────────────────
+  description?: string;
+  gender?: string;
+  occasion?: string;
+  style?: string;
+  availableSizes?: string[];
+  availableMetals?: string[];
+  discountPercent?: number;
+  priceBreakup?: PriceBreakup;
+  specifications?: ProductSpecifications;
+  collectionName?: string;
+  videoUrl?: string;
+  videoUri?: string;
 };
 
 export type InventoryTrackEvent = 'view' | 'wishlist' | 'inquiry' | 'wa_click';

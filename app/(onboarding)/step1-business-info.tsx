@@ -14,6 +14,7 @@ import { useFontScale } from '@hooks/useFontScale';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
 import { submitBusinessInfo } from '@services/onboardingService';
+import { api } from '@services/api';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { formatPhoneDisplay } from '@utils/formatPhone';
@@ -48,7 +49,11 @@ const step1Schema = z.object({
 type Step1FormValues = z.infer<typeof step1Schema>;
 
 type GeocodeResponse = {
-  results?: Array<{ formatted_address: string }>;
+  formatted_address: string | null;
+  locality: string | null;
+  city: string | null;
+  lat: number;
+  lng: number;
 };
 
 export default function Step1BusinessInfoScreen() {
@@ -71,6 +76,7 @@ export default function Step1BusinessInfoScreen() {
     ? formatPhoneDisplay(countryCode ?? '+91', verifiedContactNumber)
     : '';
 
+  const [locality, setLocality] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
@@ -100,41 +106,34 @@ export default function Step1BusinessInfoScreen() {
     }
   }, [reset]);
 
+
   const handleUseCurrentLocation = async () => {
     setIsFetchingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        void dialog.alert('Location permission denied', 'Please enter address manually.');
+        void dialog.alert('Location permission denied', 'Please enable location permission.');
         return;
       }
 
-      const position = await Location.getCurrentPositionAsync();
-      const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
-      if (!mapsKey) {
-        void dialog.alert(
-          'Google Maps API key not configured',
-          'Please enter address manually.',
-        );
-        return;
-      }
-
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       const { latitude, longitude } = position.coords;
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${mapsKey}`;
-      const response = await fetch(url);
-      if (!response.ok) {
+
+      const { data } = await api.get<GeocodeResponse>('/api/jeweller/utils/geocode', {
+        params: { lat: latitude, lng: longitude },
+      });
+
+      if (!data.formatted_address) {
         void dialog.alert('Could not fetch location', 'Please enter manually.');
         return;
       }
 
-      const data = (await response.json()) as GeocodeResponse;
-      const formattedAddress = data.results?.[0]?.formatted_address;
-      if (!formattedAddress) {
-        void dialog.alert('Could not fetch location', 'Please enter manually.');
-        return;
+      setValue('businessAddress', data.formatted_address, { shouldValidate: true });
+      if (data.locality) {
+        setLocality(data.locality);
       }
-
-      setValue('businessAddress', formattedAddress, { shouldValidate: true });
     } catch {
       void dialog.alert('Could not fetch location', 'Please enter manually.');
     } finally {
@@ -151,6 +150,8 @@ export default function Step1BusinessInfoScreen() {
         ownerName: values.ownerName,
         contactNumber: verifiedContactNumber,
         businessAddress: values.businessAddress,
+        // Send geocoded locality if available; backend falls back to businessAddress
+        locality: locality.trim() || undefined,
       };
       await submitBusinessInfo(payload);
       setStep1Data(payload);

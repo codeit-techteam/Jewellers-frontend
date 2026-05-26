@@ -6,6 +6,7 @@ import { INVENTORY_DRAFTS_FILTER } from '@constants/inventory';
 import { useCategories } from '@hooks/useCategories';
 import { formatCategoryName } from '@utils/categoryLabel';
 import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
+import { RETURN_TO_INVENTORY } from '@lib/navigateBack';
 import { getProducts, removeProductApi } from '@services/inventoryService';
 import { useInventoryStore } from '@store/useInventoryStore';
 import type { InventoryProduct } from '@/types/inventory';
@@ -137,6 +138,33 @@ function ProductCard({
       <Text className="mt-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
         Making Charges: {makingLabel}
       </Text>
+
+      {/* Tags row */}
+      {(product.gender || product.occasion || product.style) ? (
+        <View className="mt-2 flex-row flex-wrap" style={{ gap: 6 }}>
+          {[product.gender, product.occasion, product.style].filter(Boolean).map((tag) => (
+            <View
+              key={tag}
+              className="rounded-full px-2 py-1"
+              style={{ backgroundColor: colors.SURFACE_MUTED }}
+            >
+              <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {/* Discount badge */}
+      {product.discountPercent && product.discountPercent > 0 ? (
+        <View
+          className="mt-2 self-start rounded-full px-3 py-1"
+          style={{ backgroundColor: colors.GOLD }}
+        >
+          <Text style={{ fontSize: micro, color: colors.WHITE, fontWeight: '600' }}>
+            {product.discountPercent}% OFF Making Charges
+          </Text>
+        </View>
+      ) : null}
       </Pressable>
 
       <View className="mt-3 flex-row items-center">
@@ -374,7 +402,12 @@ export default function InventoryScreen() {
                   : 'No products in this category'}
             </Text>
             <Pressable
-              onPress={() => router.push('/(app)/inventory/add')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/inventory/add',
+                  params: { returnTo: RETURN_TO_INVENTORY },
+                })
+              }
               className="mt-4 rounded-full px-4 py-2"
               style={{ backgroundColor: colors.NAVY }}
             >
@@ -395,14 +428,14 @@ export default function InventoryScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/(app)/product-detail',
-                  params: { productId: product.id, returnTo: '/(app)/inventory' },
+                  params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
                 })
               }
               onRemove={() => handleRemove(product)}
               onEdit={() =>
                 router.push({
                   pathname: '/(app)/inventory/edit',
-                  params: { productId: product.id },
+                  params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
                 })
               }
             />
@@ -411,7 +444,12 @@ export default function InventoryScreen() {
       </ScrollView>
 
       <Pressable
-        onPress={() => router.push('/(app)/inventory/add')}
+        onPress={() =>
+          router.push({
+            pathname: '/(app)/inventory/add',
+            params: { returnTo: RETURN_TO_INVENTORY },
+          })
+        }
         className="absolute items-center justify-center rounded-full"
         style={{
           width: 56,

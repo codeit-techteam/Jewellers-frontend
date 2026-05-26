@@ -34,6 +34,18 @@ function toAddProductForm(product: InventoryProduct): AddProductForm {
     imageUri: product.imageUri,
     imageUris: product.imageUris,
     additionalDetails: product.additionalDetails,
+    description: product.description,
+    gender: product.gender,
+    occasion: product.occasion,
+    style: product.style,
+    availableSizes: product.availableSizes,
+    availableMetals: product.availableMetals,
+    discountPercent: product.discountPercent,
+    priceBreakup: product.priceBreakup,
+    specifications: product.specifications,
+    collectionName: product.collectionName,
+    videoUri: product.videoUri,
+    videoUrl: product.videoUrl,
   };
 }
 

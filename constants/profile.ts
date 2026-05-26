@@ -2,7 +2,9 @@ import type { BusinessDocument, BusinessProfile } from '@/types/profile';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 
 export const SUPPORT_PHONE = '+919876543210';
-export const SUPPORT_EMAIL = 'support@psltd.com';
+export const SUPPORT_WHATSAPP = '919876543210'; // no leading +, for wa.me links
+export const SUPPORT_EMAIL = 'support@gehnahub.com';
+export const SUPPORT_WEBSITE = 'https://gehnahub.com/support';
 export const PROFILE_TAGLINE = 'Premium Jewelry Partner';
 
 export function createInitialProfile(): BusinessProfile {

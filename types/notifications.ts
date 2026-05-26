@@ -6,6 +6,7 @@ export type NotificationUiType = 'lead' | 'order' | 'system';
 export type AppNotification = {
   id: string;
   type: NotificationUiType;
+  rawType: string;
   title: string;
   body: string;
   time: string;

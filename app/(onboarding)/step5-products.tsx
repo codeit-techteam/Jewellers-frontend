@@ -1,178 +1,97 @@
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
-import { pickImageFromLibrary } from '@components/ui/DocumentUploader';
 import { colors } from '@constants/colors';
-import {
-  MIN_PRODUCTS_REQUIRED,
-  PRODUCT_UPLOAD_BENEFITS,
-} from '@constants/products';
+import { MIN_PRODUCTS_REQUIRED, PRODUCT_UPLOAD_BENEFITS } from '@constants/products';
 import { useFontScale } from '@hooks/useFontScale';
 import { handleApiError } from '@utils/handleApiError';
 import { submitForReview } from '@services/onboardingService';
-import { getProducts, removeProductApi, saveSimpleProduct } from '@services/inventoryService';
+import { getProducts, removeProductApi } from '@services/inventoryService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { InventoryProduct } from '@/types/inventory';
-import { useCategories } from '@hooks/useCategories';
 import { formatCategoryName } from '@utils/categoryLabel';
 import { formatInr } from '@utils/formatCurrency';
 import { dialog } from '@utils/dialog';
+import { RETURN_TO_STEP5_PRODUCTS } from '@lib/navigateBack';
 import { Ionicons } from '@expo/vector-icons';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { z } from 'zod';
-
-const productFormSchema = z.object({
-  name: z.string().min(1, 'Product name is required').min(3, 'Minimum 3 characters'),
-  categoryId: z.string().uuid('Select a category'),
-  price: z
-    .string()
-    .min(1, 'Price is required')
-    .refine((value) => {
-      const parsed = Number(value.replace(/,/g, ''));
-      return !Number.isNaN(parsed) && parsed > 0;
-    }, 'Enter a valid positive price'),
-});
-
-type ProductFormValues = {
-  name: string;
-  categoryId: string;
-  price: string;
-};
-
-const defaultFormValues: ProductFormValues = {
-  name: '',
-  categoryId: '',
-  price: '',
-};
 
 export default function Step5ProductsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, h1, h2, body, label, micro, button } = useFontScale();
-  const scrollRef = useRef<ScrollView>(null);
 
-  const setStoreStatus = useOnboardingStore((state) => state.setStoreStatus);
-  const setOnboardingStep = useOnboardingStore((state) => state.setOnboardingStep);
-  const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
+  const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
 
-  const [apiProducts, setApiProducts] = useState<InventoryProduct[]>([]);
+  const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
-  const [isSavingProduct, setIsSavingProduct] = useState(false);
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [imageFileName, setImageFileName] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const { data: categories = [], isLoading: isLoadingCategories } = useCategories();
-
-  // Load persisted products from the server on mount so progress survives restarts.
-  useEffect(() => {
-    const fetchApiProducts = async () => {
-      try {
-        const fetched = await getProducts({ status: 'active', is_draft: false });
-        setApiProducts(fetched);
-      } catch {
-        // Network failure — fall back to showing only local products
-      } finally {
-        setIsLoadingProducts(false);
-      }
-    };
-    void fetchApiProducts();
+  const fetchProducts = useCallback(async () => {
+    setIsLoadingProducts(true);
+    setApiError(null);
+    try {
+      // Fetch all products (active + draft) — during onboarding products are
+      // saved as drafts and become active only after boutique approval.
+      const fetched = await getProducts();
+      setProducts(fetched);
+    } catch (err) {
+      setApiError(handleApiError(err));
+    } finally {
+      setIsLoadingProducts(false);
+    }
   }, []);
 
-  // Only count DB-persisted products (local-only products are no longer used).
-  const addedCount = apiProducts.length;
+  // Re-fetch every time this screen comes into focus (i.e. after returning from add/edit)
+  useFocusEffect(
+    useCallback(() => {
+      void fetchProducts();
+    }, [fetchProducts]),
+  );
+
+  const addedCount = products.length;
   const remaining = Math.max(0, MIN_PRODUCTS_REQUIRED - addedCount);
   const progressPercent = Math.min(100, (addedCount / MIN_PRODUCTS_REQUIRED) * 100);
-  const canContinue = addedCount >= MIN_PRODUCTS_REQUIRED;
+  const canLaunch = addedCount >= MIN_PRODUCTS_REQUIRED;
 
-  const {
-    control,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors },
-  } = useForm<ProductFormValues>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: defaultFormValues,
-    mode: 'onChange',
-  });
+  const progressHint = canLaunch
+    ? 'Minimum reached! Add more to strengthen your store.'
+    : `Add ${remaining} more product${remaining === 1 ? '' : 's'} to continue`;
 
-  const selectedCategoryId = watch('categoryId');
-  const selectedCategoryLabel =
-    categories.find((c) => c.id === selectedCategoryId)?.name ?? '';
-
-  const resetForm = useCallback(() => {
-    reset(defaultFormValues);
-    setImageUri(null);
-    setImageFileName(null);
-    setImageError(null);
-  }, [reset]);
-
-  const handlePickImage = async () => {
-    const picked = await pickImageFromLibrary();
-    if (picked?.fileUri) {
-      setImageUri(picked.fileUri);
-      setImageFileName(picked.fileName ?? null);
-      setImageError(null);
-    }
+  const handleAddProduct = () => {
+    router.push('/(onboarding)/add-product');
   };
 
-  const handleRemoveProduct = (id: string, name: string) => {
-    void dialog.confirm(`Remove "${name}"?`, 'This product will be deleted from your list.', {
+  const handleEditProduct = (productId: string) => {
+    router.push({
+      pathname: '/(app)/inventory/edit',
+      params: { productId, returnTo: RETURN_TO_STEP5_PRODUCTS },
+    });
+  };
+
+  const handleDeleteProduct = (id: string, name: string) => {
+    void dialog.confirm(`Remove "${name}"?`, 'This product will be deleted from your store.', {
       destructive: true,
       confirmText: 'Remove',
       onConfirm: () => {
         void removeProductApi(id)
-          .then(() => setApiProducts((prev) => prev.filter((p) => p.id !== id)))
+          .then(() => setProducts((prev) => prev.filter((p) => p.id !== id)))
           .catch(() => dialog.alert('Error', 'Could not remove product. Try again.'));
       },
     });
   };
 
-  const onAddProduct = async (values: ProductFormValues) => {
-    if (!imageUri) {
-      setImageError('Product image is required');
-      return;
-    }
-
-    setIsSavingProduct(true);
-    try {
-      const saved = await saveSimpleProduct({
-        name: values.name.trim(),
-        categoryId: values.categoryId,
-        price: Number(values.price.replace(/,/g, '')),
-        imageUri,
-        imageFileName: imageFileName ?? undefined,
-      });
-      setApiProducts((prev) => [...prev, saved]);
-      resetForm();
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (error) {
-      void dialog.alert('Could not save product', handleApiError(error));
-    } finally {
-      setIsSavingProduct(false);
-    }
-  };
-
-  const handleContinue = async () => {
+  const handleLaunch = async () => {
     setApiError(null);
     setIsSubmitting(true);
     try {
@@ -194,14 +113,11 @@ export default function Step5ProductsScreen() {
     }
   };
 
-  const progressHint =
-    addedCount >= MIN_PRODUCTS_REQUIRED
-      ? 'Minimum reached! Add more to strengthen your store.'
-      : `Add ${remaining} more product${remaining === 1 ? '' : 's'} to continue`;
-
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />
+
+      {/* ── Header ── */}
       <View className="px-5">
         <OnboardingScreenHeader title="Add Your Products" onBack={() => router.back()} />
         <Text
@@ -212,26 +128,22 @@ export default function Step5ProductsScreen() {
         </Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
       <ScrollView
-        ref={scrollRef}
         className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 130 }}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
+        {/* ── Title ── */}
         <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
           Add Your Products
         </Text>
-        <Text className="mt-2" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+        <Text className="mt-1" style={{ fontSize: body, color: colors.BODY_TEXT }}>
           Upload at least {MIN_PRODUCTS_REQUIRED} products to launch your jewelry storefront.
         </Text>
 
+        {/* ── Why upload info card ── */}
         <View
-          className="mt-5 rounded-xl border p-4"
+          className="mt-4 rounded-xl border p-4"
           style={{ backgroundColor: colors.INFO_BG, borderColor: colors.INFO_BORDER }}
         >
           <View className="mb-3 flex-row items-center">
@@ -260,24 +172,44 @@ export default function Step5ProductsScreen() {
           ))}
         </View>
 
+        {/* ── Progress tracker ── */}
         <View
-          className="mt-5 rounded-xl border p-4"
-          style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
+          className="mt-4 rounded-xl border p-4"
+          style={{ borderColor: canLaunch ? colors.SUCCESS : colors.BORDER, backgroundColor: colors.WHITE }}
         >
-          <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>
-            <Text className="font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
-              {addedCount}
+          <View className="flex-row items-center justify-between">
+            <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>
+              <Text className="font-bold" style={{ fontSize: h2, color: canLaunch ? colors.SUCCESS : colors.NAVY }}>
+                {addedCount}
+              </Text>
+              <Text style={{ fontSize: h2, color: colors.BODY_TEXT }}> / {MIN_PRODUCTS_REQUIRED} </Text>
+              Products Added
             </Text>
-            <Text style={{ fontSize: h2, color: colors.BODY_TEXT }}> / {MIN_PRODUCTS_REQUIRED} </Text>
-            Products Added
-          </Text>
+            {canLaunch ? (
+              <View
+                className="flex-row items-center rounded-full px-2 py-1"
+                style={{ backgroundColor: colors.SUCCESS }}
+              >
+                <Ionicons name="checkmark-circle" size={width * 0.04} color={colors.WHITE} />
+                <Text
+                  className="ml-1 font-semibold"
+                  style={{ fontSize: micro, color: colors.WHITE }}
+                >
+                  Ready
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <View
             className="mt-3 h-2 overflow-hidden rounded-full"
             style={{ backgroundColor: colors.SURFACE_MUTED }}
           >
             <View
               className="h-full rounded-full"
-              style={{ width: `${progressPercent}%`, backgroundColor: colors.NAVY }}
+              style={{
+                width: `${progressPercent}%`,
+                backgroundColor: canLaunch ? colors.SUCCESS : colors.NAVY,
+              }}
             />
           </View>
           <Text className="mt-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
@@ -285,262 +217,101 @@ export default function Step5ProductsScreen() {
           </Text>
         </View>
 
+        {/* ── Product list ── */}
         {isLoadingProducts ? (
-          <ActivityIndicator color={colors.NAVY} style={{ marginTop: 16 }} />
-        ) : null}
+          <ActivityIndicator color={colors.NAVY} style={{ marginTop: 20 }} />
+        ) : (
+          <>
+            {products.map((product) => (
+              <View
+                key={product.id}
+                className="mt-3 flex-row rounded-xl border p-3"
+                style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
+              >
+                {/* Thumbnail */}
+                {product.imageUri ? (
+                  <Image
+                    source={{ uri: product.imageUri }}
+                    style={{ width: 76, height: 76, borderRadius: 10 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View
+                    className="items-center justify-center rounded-xl"
+                    style={{
+                      width: 76,
+                      height: 76,
+                      backgroundColor: colors.SURFACE_MUTED,
+                    }}
+                  >
+                    <Ionicons name="diamond-outline" size={width * 0.07} color={colors.BODY_TEXT} />
+                  </View>
+                )}
 
-        {apiProducts.map((product) => (
-          <View
-            key={product.id}
-            className="mt-3 flex-row rounded-xl border p-3"
-            style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-          >
-            <Image
-              source={{ uri: product.imageUri }}
-              style={{ width: 80, height: 80, borderRadius: 8 }}
-              resizeMode="cover"
-            />
-            <View className="ml-3 flex-1 justify-between">
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-2">
-                  <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+                {/* Info */}
+                <View className="ml-3 flex-1">
+                  <Text
+                    className="font-bold"
+                    style={{ fontSize: body, color: colors.NAVY }}
+                    numberOfLines={1}
+                  >
                     {product.name}
                   </Text>
-                  <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-                    {formatCategoryName(product.category)}
-                  </Text>
-                  <Text className="mt-1 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+                  {product.category ? (
+                    <View
+                      className="mt-1 self-start rounded-full px-2 py-0.5"
+                      style={{ backgroundColor: colors.INFO_BG }}
+                    >
+                      <Text style={{ fontSize: micro, color: colors.NAVY }}>
+                        {formatCategoryName(product.category)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Text
+                    className="mt-1 font-semibold"
+                    style={{ fontSize: body, color: colors.NAVY }}
+                  >
                     {formatInr(product.price)}
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() => handleRemoveProduct(product.id, product.name)}
-                  hitSlop={8}
-                  accessibilityLabel={`Remove ${product.name}`}
-                >
-                  <Ionicons name="trash-outline" size={width * 0.05} color={colors.ERROR} />
-                </Pressable>
-              </View>
-              <View className="flex-row justify-end">
-                <View
-                  className="rounded-full px-2 py-0.5"
-                  style={{ backgroundColor: colors.NAVY }}
-                >
-                  <Text
-                    className="font-semibold uppercase"
-                    style={{ fontSize: micro, color: colors.WHITE }}
+
+                {/* Actions */}
+                <View className="ml-2 items-center justify-center">
+                  <Pressable
+                    onPress={() => handleDeleteProduct(product.id, product.name)}
+                    hitSlop={8}
+                    accessibilityLabel={`Delete ${product.name}`}
+                    className="items-center justify-center rounded-full"
+                    style={{ width: 34, height: 34, backgroundColor: '#FEE2E2' }}
                   >
-                    {formatCategoryName(product.category)}
-                  </Text>
+                    <Ionicons name="trash-outline" size={width * 0.042} color={colors.ERROR} />
+                  </Pressable>
                 </View>
               </View>
-            </View>
-          </View>
-        ))}
+            ))}
+          </>
+        )}
 
-        <View
-          className="mt-5 flex-row rounded-xl border border-dashed p-3"
-          style={{ borderColor: colors.UPLOAD_BORDER_DASHED }}
-        >
-          <Pressable
-            onPress={() => void handlePickImage()}
-            className="items-center justify-center rounded-lg border border-dashed"
-            style={{
-              width: 80,
-              height: 80,
-              borderColor: colors.BORDER,
-              backgroundColor: colors.UPLOAD_BG,
-            }}
-          >
-            {imageUri ? (
-              <Image
-                source={{ uri: imageUri }}
-                style={{ width: 80, height: 80, borderRadius: 8 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <>
-                <Ionicons name="diamond-outline" size={width * 0.06} color={colors.BODY_TEXT} />
-                <Text
-                  className="mt-1 text-center"
-                  style={{ fontSize: micro, color: colors.BODY_TEXT }}
-                >
-                  Upload Image
-                </Text>
-              </>
-            )}
-          </Pressable>
-
-          <View className="ml-3 flex-1">
-            <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-              Product Name
-            </Text>
-            <Controller
-              control={control}
-              name="name"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  placeholder="e.g. Gold Bangles"
-                  placeholderTextColor={colors.BODY_TEXT}
-                  className="mb-2 rounded-lg border px-3 py-2"
-                  style={{
-                    borderColor: errors.name ? colors.ERROR : colors.BORDER,
-                    fontSize: body,
-                    color: colors.NAVY,
-                  }}
-                />
-              )}
-            />
-            {errors.name ? (
-              <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.name.message}</Text>
-            ) : null}
-
-            <View className="mt-2 flex-row" style={{ gap: width * 0.03 }}>
-              <View className="flex-1">
-                <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-                  Category
-                </Text>
-                <Controller
-                  control={control}
-                  name="categoryId"
-                  render={({ field: { onChange, value } }) => (
-                    <>
-                      <Pressable
-                        onPress={() => {
-                          if (!isLoadingCategories && categories.length > 0) {
-                            setCategoryModalVisible(true);
-                          }
-                        }}
-                        className="flex-row items-center justify-between rounded-lg border px-3 py-2"
-                        style={{ borderColor: errors.categoryId ? colors.ERROR : colors.BORDER }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: body,
-                            color: value ? colors.NAVY : colors.BODY_TEXT,
-                          }}
-                        >
-                          {isLoadingCategories
-                            ? 'Loading…'
-                            : selectedCategoryLabel
-                              ? formatCategoryName(selectedCategoryLabel)
-                              : 'Select'}
-                        </Text>
-                        <Ionicons name="chevron-down" size={width * 0.04} color={colors.BODY_TEXT} />
-                      </Pressable>
-                      <Modal
-                        visible={categoryModalVisible}
-                        transparent
-                        animationType="fade"
-                        onRequestClose={() => setCategoryModalVisible(false)}
-                      >
-                        <Pressable
-                          className="flex-1 justify-end"
-                          style={{ backgroundColor: colors.OVERLAY_DARK }}
-                          onPress={() => setCategoryModalVisible(false)}
-                        >
-                          <View
-                            className="rounded-t-2xl bg-white px-4 pb-8 pt-4"
-                            style={{ paddingBottom: insets.bottom + 16 }}
-                          >
-                            <Text
-                              className="mb-3 font-semibold"
-                              style={{ fontSize: body, color: colors.NAVY }}
-                            >
-                              Select category
-                            </Text>
-                            {categories.map((category) => {
-                              const isSelected = category.id === selectedCategoryId;
-                              return (
-                                <Pressable
-                                  key={category.id}
-                                  onPress={() => {
-                                    onChange(category.id);
-                                    setCategoryModalVisible(false);
-                                  }}
-                                  className="rounded-lg px-3 py-3"
-                                  style={{
-                                    backgroundColor: isSelected ? colors.INFO_BG : undefined,
-                                  }}
-                                >
-                                  <Text style={{ fontSize: body, color: colors.NAVY }}>
-                                    {formatCategoryName(category.name)}
-                                  </Text>
-                                </Pressable>
-                              );
-                            })}
-                          </View>
-                        </Pressable>
-                      </Modal>
-                    </>
-                  )}
-                />
-              </View>
-
-              <View className="flex-1">
-                <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-                  Price
-                </Text>
-                <Controller
-                  control={control}
-                  name="price"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <View
-                      className="flex-row items-center rounded-lg border px-3"
-                      style={{ borderColor: errors.price ? colors.ERROR : colors.BORDER }}
-                    >
-                      <Text style={{ fontSize: body, color: colors.NAVY }}>₹</Text>
-                      <TextInput
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                        placeholder="0"
-                        keyboardType="numeric"
-                        placeholderTextColor={colors.BODY_TEXT}
-                        className="flex-1 py-2"
-                        style={{ fontSize: body, color: colors.NAVY, marginLeft: 4 }}
-                      />
-                    </View>
-                  )}
-                />
-                {errors.price ? (
-                  <Text style={{ fontSize: micro, color: colors.ERROR }}>
-                    {errors.price.message}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {imageError ? (
-          <Text className="mt-1" style={{ fontSize: micro, color: colors.ERROR }}>
-            {imageError}
-          </Text>
-        ) : null}
-
+        {/* ── Add New Product button ── */}
         <Pressable
-          onPress={() => { void handleSubmit(onAddProduct)(); }}
-          disabled={isSavingProduct || isSubmitting}
-          className="mt-4 items-center justify-center rounded-xl border py-3"
-          style={{ borderColor: colors.NAVY, minHeight: 48, opacity: isSavingProduct ? 0.7 : 1 }}
+          onPress={handleAddProduct}
+          className="mt-4 flex-row items-center justify-center rounded-xl border-2 py-4"
+          style={{ borderColor: colors.NAVY, borderStyle: 'dashed' }}
         >
-          {isSavingProduct ? (
-            <ActivityIndicator color={colors.NAVY} />
-          ) : (
-            <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
-              + Add Another Product
-            </Text>
-          )}
+          <Ionicons name="add-circle-outline" size={width * 0.055} color={colors.NAVY} />
+          <Text
+            className="ml-2 font-semibold"
+            style={{ fontSize: button, color: colors.NAVY }}
+          >
+            Add New Product
+          </Text>
         </Pressable>
       </ScrollView>
 
+      {/* ── Sticky footer ── */}
       <View
         className="border-t bg-white px-5 pt-3"
-        style={{ borderColor: colors.BORDER, paddingBottom: insets.bottom + 8 }}
+        style={{ borderColor: colors.BORDER, paddingBottom: insets.bottom + 12 }}
       >
         {apiError ? (
           <Text className="mb-2 text-center" style={{ fontSize: label, color: colors.ERROR }}>
@@ -548,33 +319,47 @@ export default function Step5ProductsScreen() {
           </Text>
         ) : null}
 
+        {!canLaunch ? (
+          <View
+            className="mb-2 flex-row items-center justify-center rounded-xl p-3"
+            style={{ backgroundColor: colors.SURFACE_MUTED }}
+          >
+            <Ionicons name="lock-closed-outline" size={width * 0.04} color={colors.BODY_TEXT} />
+            <Text className="ml-2" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+              Add {remaining} more product{remaining === 1 ? '' : 's'} to unlock Launch
+            </Text>
+          </View>
+        ) : null}
+
         <Pressable
-          onPress={() => void handleContinue()}
-          disabled={isSubmitting || isSavingProduct}
-          className="flex-row items-center justify-center rounded-xl py-3"
+          onPress={() => void handleLaunch()}
+          disabled={!canLaunch || isSubmitting}
+          className="flex-row items-center justify-center rounded-xl py-4"
           style={{
-            backgroundColor: colors.NAVY,
+            backgroundColor: canLaunch ? colors.NAVY : colors.SURFACE_MUTED,
             minHeight: 52,
-            opacity: isSubmitting || isSavingProduct ? 0.7 : 1,
+            opacity: isSubmitting ? 0.7 : 1,
           }}
         >
           {isSubmitting ? (
-            <ActivityIndicator color={colors.WHITE} />
+            <ActivityIndicator color={canLaunch ? colors.WHITE : colors.BODY_TEXT} />
           ) : (
             <>
-              <Text style={{ fontSize: body, marginRight: 4 }}>🚀</Text>
-              <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
-                Continue to Launch
+              <Text style={{ fontSize: body, marginRight: 6 }}>{canLaunch ? '🚀' : '🔒'}</Text>
+              <Text
+                className="font-semibold"
+                style={{ fontSize: button, color: canLaunch ? colors.WHITE : colors.BODY_TEXT }}
+              >
+                Launch My Store
               </Text>
             </>
           )}
         </Pressable>
 
-        <Text className="mt-3 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+        <Text className="mt-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
           Your store will become live after product verification.
         </Text>
       </View>
-      </KeyboardAvoidingView>
     </View>
   );
 }

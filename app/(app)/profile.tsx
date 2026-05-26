@@ -1,6 +1,10 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
-import { SUPPORT_PHONE } from '@constants/profile';
+import {
+  SUPPORT_EMAIL,
+  SUPPORT_PHONE,
+  SUPPORT_WHATSAPP,
+} from '@constants/profile';
 import { getStore, updateCover, updateLogo } from '@services/storeService';
 import type { BusinessDocument } from '@/types/profile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -185,7 +189,10 @@ export default function ProfileScreen() {
     return doc.updatedAt;
   };
 
-  const docBadge = (doc: BusinessDocument | undefined) => {
+  // If the store is admin-approved, GST & BIS are implicitly verified (admin reviewed them).
+  const storeApproved = profile.isVerified;
+
+  const docBadge = (doc: BusinessDocument | undefined, isComplianceDoc = false) => {
     if (!doc) {
       return (
         <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.SURFACE_MUTED }}>
@@ -193,21 +200,23 @@ export default function ProfileScreen() {
         </View>
       );
     }
-    if (doc.status === 'verified') {
+    // Store approval implies admin has reviewed GST and BIS docs
+    const effectiveStatus = storeApproved && isComplianceDoc ? 'verified' : doc.status;
+    if (effectiveStatus === 'verified') {
       return (
         <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.SUCCESS}22` }}>
           <Text style={{ fontSize: micro, color: colors.SUCCESS, fontWeight: '700' }}>VERIFIED</Text>
         </View>
       );
     }
-    if (doc.status === 'expiring') {
+    if (effectiveStatus === 'expiring') {
       return (
         <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.TIP_BG }}>
           <Text style={{ fontSize: micro, color: colors.GOLD, fontWeight: '700' }}>EXPIRING SOON</Text>
         </View>
       );
     }
-    if (doc.status === 'expired') {
+    if (effectiveStatus === 'expired') {
       return (
         <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.ERROR}22` }}>
           <Text style={{ fontSize: micro, color: colors.ERROR, fontWeight: '700' }}>EXPIRED</Text>
@@ -221,23 +230,11 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleContactSupport = () => {
-    void dialog.alert('Contact Support', 'How would you like to reach us?', [
-      {
-        text: '📞 Call Support',
-        onPress: () => void Linking.openURL(`tel:${SUPPORT_PHONE}`),
-      },
-      {
-        text: '💬 WhatsApp Support',
-        onPress: () => void Linking.openURL('https://wa.me/919876543210'),
-      },
-      {
-        text: '📧 Email Support',
-        onPress: () => void Linking.openURL('mailto:support@gehnahub.com'),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+  const openWhatsApp = () =>
+    void Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP}?text=Hi%2C%20I%20need%20help%20with%20my%20Jewellars%20account.`);
+  const openCall = () => void Linking.openURL(`tel:${SUPPORT_PHONE}`);
+  const openEmail = () =>
+    void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Support%20Request%20-%20Jewellars%20App`);
 
   const handleOpenMaps = () => {
     const encoded = encodeURIComponent(profile.address);
@@ -389,16 +386,8 @@ export default function ProfileScreen() {
             micro={micro}
           />
           <SettingsRow
-            icon="call-outline"
-            label="Contact Support"
-            subtitle={`${SUPPORT_PHONE} • support@gehnahub.com`}
-            onPress={handleContactSupport}
-            body={body}
-            micro={micro}
-          />
-          <SettingsRow
             icon="location-outline"
-            label="Registered Office"
+            label="Business Address"
             subtitle={profile.address}
             onPress={handleOpenMaps}
             body={body}
@@ -472,7 +461,7 @@ export default function ProfileScreen() {
             micro={micro}
             rightElement={
               <View className="flex-row items-center">
-                <View className="mr-2">{docBadge(gstDoc)}</View>
+                <View className="mr-2">{docBadge(gstDoc, true)}</View>
                 <Ionicons name="chevron-forward" size={18} color={colors.BODY_TEXT} />
               </View>
             }
@@ -492,8 +481,86 @@ export default function ProfileScreen() {
             body={body}
             micro={micro}
             isLast
-            rightElement={docBadge(bisDoc)}
+            rightElement={docBadge(bisDoc, true)}
           />
+        </View>
+
+        {/* ── Support & Help ── */}
+        <Text
+          className="mb-2 mt-6 uppercase tracking-wider"
+          style={{ fontSize: micro, color: colors.BODY_TEXT }}
+        >
+          Support & Help
+        </Text>
+        <View className="overflow-hidden rounded-xl border" style={{ borderColor: colors.BORDER }}>
+          {/* WhatsApp */}
+          <Pressable
+            onPress={openWhatsApp}
+            className="flex-row items-center px-4 py-4"
+            style={{ borderBottomWidth: 1, borderBottomColor: colors.BORDER }}
+          >
+            <View
+              className="mr-3 items-center justify-center rounded-lg"
+              style={{ width: 36, height: 36, backgroundColor: '#DCFCE7' }}
+            >
+              <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+                WhatsApp Support
+              </Text>
+              <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+                Chat with us — fastest response
+              </Text>
+            </View>
+            <View
+              className="rounded-full px-2 py-0.5"
+              style={{ backgroundColor: '#DCFCE7' }}
+            >
+              <Text style={{ fontSize: micro, color: '#16A34A', fontWeight: '700' }}>FAST</Text>
+            </View>
+          </Pressable>
+
+          {/* Call */}
+          <Pressable
+            onPress={openCall}
+            className="flex-row items-center px-4 py-4"
+            style={{ borderBottomWidth: 1, borderBottomColor: colors.BORDER }}
+          >
+            <View
+              className="mr-3 items-center justify-center rounded-lg"
+              style={{ width: 36, height: 36, backgroundColor: colors.INFO_BG }}
+            >
+              <Ionicons name="call-outline" size={20} color={colors.NAVY} />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+                Call Support
+              </Text>
+              <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{SUPPORT_PHONE}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.BODY_TEXT} />
+          </Pressable>
+
+          {/* Email */}
+          <Pressable
+            onPress={openEmail}
+            className="flex-row items-center px-4 py-4"
+          >
+            <View
+              className="mr-3 items-center justify-center rounded-lg"
+              style={{ width: 36, height: 36, backgroundColor: colors.INFO_BG }}
+            >
+              <Ionicons name="mail-outline" size={20} color={colors.NAVY} />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+                Email Support
+              </Text>
+              <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{SUPPORT_EMAIL}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.BODY_TEXT} />
+          </Pressable>
         </View>
 
         <Pressable

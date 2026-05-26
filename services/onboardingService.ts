@@ -55,6 +55,7 @@ type Step1Body = {
   ownerName: string;
   contactNumber: string;
   businessAddress: string;
+  locality?: string;
   latitude?: number;
   longitude?: number;
 };
