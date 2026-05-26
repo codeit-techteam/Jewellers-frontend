@@ -451,20 +451,10 @@ export default function ProfileScreen() {
             icon="document-text-outline"
             label="GST Certificate"
             subtitle={docStatusLabel(gstDoc)}
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/business-documents',
-                params: { highlightDoc: 'gst', returnTo: RETURN_TO_PROFILE },
-              })
-            }
+            onPress={() => {}}
             body={body}
             micro={micro}
-            rightElement={
-              <View className="flex-row items-center">
-                <View className="mr-2">{docBadge(gstDoc, true)}</View>
-                <Ionicons name="chevron-forward" size={18} color={colors.BODY_TEXT} />
-              </View>
-            }
+            rightElement={docBadge(gstDoc, true)}
           />
           <SettingsRow
             icon="shield-checkmark-outline"
@@ -472,12 +462,7 @@ export default function ProfileScreen() {
             subtitle={
               bisDoc?.licenseNo ? `License No: ${bisDoc.licenseNo}` : docStatusLabel(bisDoc)
             }
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/business-documents',
-                params: { highlightDoc: 'bis', returnTo: RETURN_TO_PROFILE },
-              })
-            }
+            onPress={() => {}}
             body={body}
             micro={micro}
             isLast

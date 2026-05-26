@@ -13,13 +13,13 @@ import {
 } from '@store/useLeadsStore';
 import { useProfileStore } from '@store/useProfileStore';
 import type { Lead } from '@/types/leads';
-import { getLeadStatusBadgeStyle } from '@utils/leadHelpers';
+import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -97,21 +97,44 @@ function LeadCard({
         </Text>
       </View>
 
+      {lead.notes ? (
+        <View
+          className="mt-2 rounded-lg p-2.5"
+          style={{ backgroundColor: colors.SURFACE_MUTED }}
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="chatbox-outline" size={16} color={colors.NAVY} />
+            <Text className="ml-2 uppercase" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+              Customer Notes
+            </Text>
+          </View>
+          <Text className="mt-1" style={{ fontSize: label, color: colors.NAVY }}>
+            {lead.notes}
+          </Text>
+        </View>
+      ) : null}
+
       {isUpcoming ? (
         <View className="mt-3 flex-row items-center">
-          <Pressable
-            onPress={onContactNow}
-            className="flex-1 items-center justify-center rounded-lg py-3"
-            style={{ backgroundColor: colors.NAVY }}
-          >
-            <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
-              Contact Now
-            </Text>
-          </Pressable>
+          {lead.phone !== 'Not provided' ? (
+            <Pressable
+              onPress={onContactNow}
+              className="flex-1 items-center justify-center rounded-lg py-3"
+              style={{ backgroundColor: colors.NAVY }}
+            >
+              <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
+                Contact Now
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onMarkVisited}
-            className="ml-2 items-center justify-center rounded-lg border px-4 py-3"
-            style={{ borderColor: colors.NAVY }}
+            className="items-center justify-center rounded-lg border px-4 py-3"
+            style={{
+              borderColor: colors.NAVY,
+              marginLeft: lead.phone !== 'Not provided' ? 8 : 0,
+              flex: lead.phone !== 'Not provided' ? undefined : 1,
+            }}
           >
             <Text className="font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
               Mark Visited
@@ -153,18 +176,15 @@ export default function LeadsScreen() {
   const setLeads = useLeadsStore((state) => state.setLeads);
   const updateLeadStatus = useLeadsStore((state) => state.updateLeadStatus);
 
-  const leadStatus =
-    activeFilter === 'upcoming' || activeFilter === 'visited' ? activeFilter : undefined;
-
   const {
     isPending,
     isError,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['leads', activeFilter],
+    queryKey: ['leads'],
     queryFn: async () => {
-      const data = await getLeads(leadStatus);
+      const data = await getLeads();
       setLeads(data);
       return data;
     },
@@ -302,14 +322,24 @@ export default function LeadsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
       >
-        {filteredLeads.length === 0 ? (
+        {leads.length === 0 ? (
+          <View className="items-center py-16 px-4">
+            <Ionicons name="calendar-outline" size={64} color="#9ca3af" />
+            <Text className="mt-4 font-bold text-center" style={{ fontSize: body, color: colors.NAVY }}>
+              No appointments yet
+            </Text>
+            <Text className="mt-2 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+              When customers book appointments at your store, they will appear here
+            </Text>
+          </View>
+        ) : filteredLeads.length === 0 ? (
           <View className="items-center py-12">
             <Ionicons name="people-outline" size={48} color={colors.BORDER} />
             <Text className="mt-3 font-semibold" style={{ fontSize: body, color: colors.BODY_TEXT }}>
               No leads found
             </Text>
             <Text className="mt-1 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
-              {searchQuery ? 'Try a different search term' : 'Leads will appear here when customers book appointments'}
+              {searchQuery ? 'Try a different search term' : 'Try a different filter'}
             </Text>
           </View>
         ) : (
@@ -320,7 +350,7 @@ export default function LeadsScreen() {
               body={body}
               label={label}
               micro={micro}
-              onContactNow={() => openLeadModal(lead)}
+              onContactNow={() => void Linking.openURL(`tel:${normalizePhoneForLink(lead.phone)}`)}
               onMarkVisited={() => confirmMarkVisited(lead)}
               onViewDetails={() => openLeadModal(lead)}
             />

@@ -15,14 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Step5ProductsScreen() {
@@ -102,9 +95,7 @@ export default function Step5ProductsScreen() {
         router.replace('/(onboarding)/review-pending');
       } else {
         const needed = result.required - result.productsCount;
-        setApiError(
-          `Add ${needed} more product${needed === 1 ? '' : 's'} to launch your store.`,
-        );
+        setApiError(`Add ${needed} more product${needed === 1 ? '' : 's'} to launch your store.`);
       }
     } catch (error) {
       setApiError(handleApiError(error));
@@ -175,14 +166,23 @@ export default function Step5ProductsScreen() {
         {/* ── Progress tracker ── */}
         <View
           className="mt-4 rounded-xl border p-4"
-          style={{ borderColor: canLaunch ? colors.SUCCESS : colors.BORDER, backgroundColor: colors.WHITE }}
+          style={{
+            borderColor: canLaunch ? colors.SUCCESS : colors.BORDER,
+            backgroundColor: colors.WHITE,
+          }}
         >
           <View className="flex-row items-center justify-between">
             <Text style={{ fontSize: body, color: colors.BODY_TEXT }}>
-              <Text className="font-bold" style={{ fontSize: h2, color: canLaunch ? colors.SUCCESS : colors.NAVY }}>
+              <Text
+                className="font-bold"
+                style={{ fontSize: h2, color: canLaunch ? colors.SUCCESS : colors.NAVY }}
+              >
                 {addedCount}
               </Text>
-              <Text style={{ fontSize: h2, color: colors.BODY_TEXT }}> / {MIN_PRODUCTS_REQUIRED} </Text>
+              <Text style={{ fontSize: h2, color: colors.BODY_TEXT }}>
+                {' '}
+                / {MIN_PRODUCTS_REQUIRED}{' '}
+              </Text>
               Products Added
             </Text>
             {canLaunch ? (
@@ -299,10 +299,7 @@ export default function Step5ProductsScreen() {
           style={{ borderColor: colors.NAVY, borderStyle: 'dashed' }}
         >
           <Ionicons name="add-circle-outline" size={width * 0.055} color={colors.NAVY} />
-          <Text
-            className="ml-2 font-semibold"
-            style={{ fontSize: button, color: colors.NAVY }}
-          >
+          <Text className="ml-2 font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
             Add New Product
           </Text>
         </Pressable>

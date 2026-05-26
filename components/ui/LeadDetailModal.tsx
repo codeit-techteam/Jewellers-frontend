@@ -180,6 +180,14 @@ export function LeadDetailModal({ lead, visible, onClose, onMarkVisited }: Props
               value={lead.serviceRequested}
               fontSize={label}
             />
+            {lead.notes ? (
+              <InfoRow
+                icon="chatbox-outline"
+                label="Customer Notes"
+                value={lead.notes}
+                fontSize={label}
+              />
+            ) : null}
 
             {/* Action buttons */}
             {isUpcoming ? (

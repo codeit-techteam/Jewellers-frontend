@@ -1,4 +1,4 @@
-export type LeadStatus = 'upcoming' | 'visited';
+export type LeadStatus = 'upcoming' | 'visited' | 'cancelled';
 
 export type Lead = {
   id: string;
@@ -8,4 +8,5 @@ export type Lead = {
   appointmentTime: string;
   serviceRequested: string;
   status: LeadStatus;
+  notes?: string | null;
 };

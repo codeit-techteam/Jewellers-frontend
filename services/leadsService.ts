@@ -5,17 +5,19 @@ import { api, ApiError } from './api';
 
 type BackendAppointment = {
   id: string;
-  customer_name?: string;
-  customer_phone?: string;
-  service_requested?: string;
-  starts_at?: string;
-  date?: string;
-  time?: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  service_requested?: string | null;
+  notes?: string | null;
+  type?: string | null;
+  starts_at?: string | null;
+  date?: string | null;
+  time?: string | null;
   status: string;
 };
 
-function formatPhone(phone?: string): string {
-  if (!phone) return '—';
+function formatPhone(phone?: string | null): string {
+  if (!phone || !phone.trim()) return 'Not provided';
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) {
     return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
@@ -23,32 +25,51 @@ function formatPhone(phone?: string): string {
   return phone;
 }
 
+function formatDate(date?: string | null): string {
+  if (!date) return '—';
+  const d = dayjs(date);
+  return d.isValid() ? d.format('MMM D, YYYY') : date;
+}
+
+function formatTime(date: string, time?: string | null): string {
+  if (!time) return '—';
+  const d = dayjs(`${date}T${time}:00`);
+  return d.isValid() ? d.format('h:mm A') : time;
+}
+
 function mapAppointment(row: BackendAppointment): Lead {
   let appointmentDate = '—';
   let appointmentTime = '—';
 
-  if (row.starts_at) {
+  // Prefer explicit date/time fields (stored as local values) over starts_at
+  // which is stored as UTC and would shift on display in local timezone.
+  if (row.date) {
+    appointmentDate = formatDate(row.date);
+    appointmentTime = formatTime(row.date, row.time);
+  } else if (row.starts_at) {
     const dt = dayjs(row.starts_at);
     if (dt.isValid()) {
       appointmentDate = dt.format('MMM D, YYYY');
-      appointmentTime = dt.format('hh:mm A');
+      appointmentTime = dt.format('h:mm A');
     }
-  } else if (row.date) {
-    appointmentDate = row.date;
-    appointmentTime = row.time ?? '—';
   }
 
   const status: LeadStatus =
-    row.status === 'visited' ? 'visited' : 'upcoming';
+    row.status === 'visited'
+      ? 'visited'
+      : row.status === 'cancelled'
+        ? 'cancelled'
+        : 'upcoming';
 
   return {
     id: row.id,
-    name: row.customer_name ?? 'Customer',
+    name: row.customer_name?.trim() || 'Walk-in Customer',
     phone: formatPhone(row.customer_phone),
     appointmentDate,
     appointmentTime,
-    serviceRequested: row.service_requested ?? 'Consultation',
+    serviceRequested: row.service_requested?.trim() || row.type || 'Consultation',
     status,
+    notes: row.notes?.trim() || null,
   };
 }
 

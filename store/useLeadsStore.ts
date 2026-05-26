@@ -19,6 +19,7 @@ type LeadsStoreState = {
 };
 
 export function isUpcomingLead(lead: Lead): boolean {
+  if (lead.status !== 'upcoming') return false;
   const appointment = dayjs(lead.appointmentDate, 'MMM D, YYYY');
   const parsed = appointment.isValid() ? appointment : dayjs(lead.appointmentDate);
   return parsed.isValid() && parsed.isAfter(dayjs().subtract(1, 'day'));
