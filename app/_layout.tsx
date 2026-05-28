@@ -4,7 +4,7 @@ import { AuthBootstrap } from '@components/auth/AuthBootstrap';
 import { DialogProvider } from '@providers/DialogProvider';
 import { QueryProvider } from '@providers/QueryProvider';
 import { getStatus } from '@services/onboardingService';
-import { saveOnboardingMeta } from '@lib/onboardingMeta';
+import { loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { useAppStore } from '@store/useAppStore';
 import { useAuthStore } from '@store/useAuthStore';
@@ -16,6 +16,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
+
+/** Returns true when the route is an in-progress onboarding step screen. */
+function isOnboardingStepRoute(route: unknown): boolean {
+  return typeof route === 'string' && (route as string).includes('/(onboarding)/step');
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -29,8 +34,8 @@ export default function RootLayout() {
     void checkPersistedAuth();
   }, [checkPersistedAuth]);
 
-  // After auth settles: fetch fresh onboarding status from API and route accordingly.
-  // Never rely solely on local meta — always confirm with the server on boot.
+  // After auth settles: route immediately using local persisted state (no network wait),
+  // hide the splash, then silently validate with the server in the background.
   useEffect(() => {
     if (isLoading || hasRoutedRef.current) return;
     hasRoutedRef.current = true;
@@ -41,29 +46,55 @@ export default function RootLayout() {
     }
 
     void (async () => {
+      // ── Phase 1: instant routing from local state ──────────────────────────
+      // checkPersistedAuth already restored isOnboardingComplete / onboardingStep /
+      // storeStatus from SecureStore. Only needsSubscription isn't in the Zustand
+      // store, so we read the full meta once (fast SecureStore read, no network).
+      const { isOnboardingComplete, onboardingStep, storeStatus } = useAuthStore.getState();
+      const localMeta = await loadOnboardingMeta().catch(() => null);
+
+      const localRoute = getResumeRoute(
+        isOnboardingComplete,
+        onboardingStep,
+        storeStatus ?? undefined,
+        localMeta?.needsSubscription,
+      );
+
+      const resolveRoute = (r: ReturnType<typeof getResumeRoute>) =>
+        isOnboardingStepRoute(r) ? '/(onboarding)/resume-choice' : (r as string);
+
+      router.replace(resolveRoute(localRoute) as Parameters<typeof router.replace>[0]);
+      void SplashScreen.hideAsync(); // ← Splash gone now; no network wait
+
+      // ── Phase 2: background server validation ──────────────────────────────
+      // Quietly fetch the authoritative status and re-route only when the server
+      // returns a destination that differs from what we already showed.
       try {
         const status = await getStatus();
 
-        // Persist fresh server state so offline fallback stays accurate.
         void saveOnboardingMeta({
           currentOnboardingStep: status.onboardingStep,
           isOnboardingComplete: status.isOnboardingComplete,
           storeStatus: status.storeStatus,
+          needsSubscription: status.needsSubscription,
+          phone: useAuthStore.getState().user?.phone,
         });
 
-        const route = getResumeRoute(
+        const serverRoute = getResumeRoute(
           status.isOnboardingComplete,
           status.onboardingStep,
           status.storeStatus,
+          status.needsSubscription,
         );
-        router.replace(route);
+
+        const resolvedServer = resolveRoute(serverRoute);
+        const resolvedLocal = resolveRoute(localRoute);
+
+        if (resolvedServer !== resolvedLocal) {
+          router.replace(resolvedServer as Parameters<typeof router.replace>[0]);
+        }
       } catch {
-        // API unreachable — fall back to whatever checkPersistedAuth loaded from SecureStore.
-        const { isOnboardingComplete, onboardingStep } = useAuthStore.getState();
-        const route = getResumeRoute(isOnboardingComplete, onboardingStep);
-        router.replace(route);
-      } finally {
-        void SplashScreen.hideAsync();
+        // Server unreachable — local routing already in effect, nothing to do.
       }
     })();
   }, [isLoading, isAuthenticated, router]);

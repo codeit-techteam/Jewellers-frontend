@@ -5,6 +5,7 @@ import { DEFAULT_COUNTRY } from '@constants/countries';
 import { colors } from '@constants/colors';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { sendOtp } from '@services/authService';
 import { useAuthStore } from '@store/useAuthStore';
@@ -13,14 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
@@ -40,6 +34,8 @@ export default function LoginScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
   const setPhoneForOtp = useAuthStore((state) => state.setPhoneForOtp);
   const setAuthFlowMode = useAuthStore((state) => state.setAuthFlowMode);
+
+  const { execute } = useAsyncAction();
 
   const [selectedCountry, setSelectedCountry] = useState<CountryOption>(DEFAULT_COUNTRY);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -81,7 +77,10 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar style="dark" />
-      <View style={{ height: headerHeight, paddingTop: insets.top }} className="items-center justify-center">
+      <View
+        style={{ height: headerHeight, paddingTop: insets.top }}
+        className="items-center justify-center"
+      >
         <DiamondIcon
           containerColor={colors.WHITE}
           color={colors.GOLD}
@@ -118,7 +117,10 @@ export default function LoginScreen() {
             </Text>
 
             <View className="flex-row items-center" style={{ gap: width * 0.025 }}>
-              <CountryPickerTrigger selected={selectedCountry} onPress={() => setPickerVisible(true)} />
+              <CountryPickerTrigger
+                selected={selectedCountry}
+                onPress={() => setPickerVisible(true)}
+              />
               <Controller
                 control={control}
                 name="phone"
@@ -151,10 +153,7 @@ export default function LoginScreen() {
 
             <View className="mt-4 flex-row items-center justify-center">
               <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>🔒 </Text>
-              <Text
-                className="tracking-wider"
-                style={{ fontSize: micro, color: colors.BODY_TEXT }}
-              >
+              <Text className="tracking-wider" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
                 SECURE 256-BIT ENCRYPTED LOGIN
               </Text>
             </View>
@@ -166,7 +165,7 @@ export default function LoginScreen() {
               showArrow
               isLoading={isSubmitting}
               disabled={isSubmitting}
-              onPress={handleSubmit(onSubmit)}
+              onPress={() => void execute(async () => handleSubmit(onSubmit)())}
             />
             {apiError ? (
               <Text className="mt-3 text-center" style={{ fontSize: label, color: colors.ERROR }}>
@@ -174,7 +173,10 @@ export default function LoginScreen() {
               </Text>
             ) : null}
 
-            <View className="mt-6 flex-row items-center justify-center" style={{ gap: width * 0.08 }}>
+            <View
+              className="mt-6 flex-row items-center justify-center"
+              style={{ gap: width * 0.08 }}
+            >
               <View className="flex-row items-center">
                 <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>✓ </Text>
                 <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>VERIFIED B2B</Text>

@@ -7,6 +7,10 @@ export type OnboardingMeta = {
   isOnboardingComplete: boolean;
   /** Last known store_status from the server — used for offline fallback routing. */
   storeStatus?: string;
+  /** Whether the approved store still needs a subscription selected. */
+  needsSubscription?: boolean;
+  /** Phone number of the authenticated user — used for the resume modal. */
+  phone?: string;
 };
 
 export async function saveOnboardingMeta(meta: OnboardingMeta): Promise<void> {
@@ -25,7 +29,13 @@ export async function loadOnboardingMeta(): Promise<OnboardingMeta | null> {
       typeof parsed.currentOnboardingStep === 'number' &&
       typeof parsed.isOnboardingComplete === 'boolean'
     ) {
-      return parsed;
+      return {
+        currentOnboardingStep: parsed.currentOnboardingStep,
+        isOnboardingComplete: parsed.isOnboardingComplete,
+        storeStatus: typeof parsed.storeStatus === 'string' ? parsed.storeStatus : undefined,
+        needsSubscription: typeof parsed.needsSubscription === 'boolean' ? parsed.needsSubscription : undefined,
+        phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
+      };
     }
     return null;
   } catch {

@@ -4,15 +4,17 @@ import { StepNavButtons } from '@components/ui/StepNavButtons';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
 import { submitBranding } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  BackHandler,
   Image,
   ImageBackground,
   KeyboardAvoidingView,
@@ -60,6 +62,22 @@ export default function Step4BrandingScreen() {
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
 
+  const { execute } = useAsyncAction();
+
+  const handleBack = useCallback(() => {
+    router.replace('/(onboarding)/step3-bis');
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
+
   const [logoUri, setLogoUri] = useState<string | null>(null);
   const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
   const [tagline, setTagline] = useState(DEFAULT_TAGLINE);
@@ -99,7 +117,7 @@ export default function Step4BrandingScreen() {
       const data = { logoUri, coverImageUri, tagline };
       await submitBranding(data);
       setStep4Data(data);
-      router.push('/(onboarding)/step5-subscription');
+      router.push('/(onboarding)/step5-products');
     } catch (error) {
       setApiError(handleApiError(error));
     } finally {
@@ -157,7 +175,7 @@ export default function Step4BrandingScreen() {
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />
       <View className="px-5">
-        <OnboardingScreenHeader title="Store Branding" onBack={() => router.back()} />
+        <OnboardingScreenHeader title="Store Branding" onBack={handleBack} />
         <StepProgressBar currentStep={4} totalSteps={5} percentLabel="80% Complete" />
       </View>
 
@@ -347,8 +365,8 @@ export default function Step4BrandingScreen() {
             </Text>
           ) : null}
           <StepNavButtons
-            onBack={() => router.back()}
-            onNext={() => void handleContinue()}
+            onBack={handleBack}
+            onNext={() => void execute(handleContinue)}
             nextLabel="Continue to Launch"
             isLoading={isSubmitting}
           />

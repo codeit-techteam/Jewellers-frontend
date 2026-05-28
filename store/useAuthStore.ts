@@ -1,8 +1,16 @@
 import { clearOnboardingMeta, loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
 import { clearWelcomeSeen, loadWelcomeSeen, setWelcomeSeen } from '@lib/welcomeMeta';
-import { clearAuthToken, registerUnauthorizedHandler, setAuthToken } from '@services/api';
+import {
+  clearAuthToken,
+  primeTokenCache,
+  registerUnauthorizedHandler,
+  setAuthToken,
+} from '@services/api';
 import * as authService from '@services/authService';
+import { useInventoryStore } from '@store/useInventoryStore';
+import { useLeadsStore } from '@store/useLeadsStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { useProfileStore } from '@store/useProfileStore';
 import type { User } from '@/types/auth';
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
@@ -21,6 +29,7 @@ type AuthState = {
   authMode: AuthFlowMode | null;
   onboardingStep: number;
   isOnboardingComplete: boolean;
+  storeStatus: string | null;
   hasSeenWelcome: boolean;
   markWelcomeSeen: () => Promise<void>;
   setAuthFlowMode: (mode: AuthFlowMode) => void;
@@ -30,6 +39,8 @@ type AuthState = {
     user: User,
     onboardingStep: number,
     isOnboardingComplete: boolean,
+    storeStatus?: string | null,
+    needsSubscription?: boolean,
   ) => Promise<void>;
   logout: () => Promise<void>;
   checkPersistedAuth: () => Promise<void>;
@@ -46,6 +57,7 @@ const initialAuthState = {
   authMode: null as AuthFlowMode | null,
   onboardingStep: 1,
   isOnboardingComplete: false,
+  storeStatus: null as string | null,
   hasSeenWelcome: false,
 };
 
@@ -71,9 +83,23 @@ export const useAuthStore = create<AuthState>((set, get) => {
       user: User,
       onboardingStep: number,
       isOnboardingComplete: boolean,
+      storeStatus?: string | null,
+      needsSubscription?: boolean,
     ) => {
-      await setAuthToken(token);
-      await saveOnboardingMeta({ currentOnboardingStep: onboardingStep, isOnboardingComplete });
+      const { phoneNumber } = get();
+
+      // All three writes are independent — run them in parallel.
+      await Promise.all([
+        setAuthToken(token),
+        saveOnboardingMeta({
+          currentOnboardingStep: onboardingStep,
+          isOnboardingComplete,
+          storeStatus: storeStatus ?? undefined,
+          needsSubscription: needsSubscription ?? undefined,
+          phone: user.phone ?? phoneNumber ?? undefined,
+        }),
+        setWelcomeSeen(),
+      ]);
 
       const onboarding = useOnboardingStore.getState();
       onboarding.hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
@@ -81,28 +107,35 @@ export const useAuthStore = create<AuthState>((set, get) => {
         onboarding.completeOnboarding();
       }
 
-      const { phoneNumber, countryCode } = get();
-      await setWelcomeSeen();
-
       set({
         isAuthenticated: true,
         token,
         user,
-        phoneNumber,
-        countryCode,
+        phoneNumber: phoneNumber,
+        countryCode: get().countryCode,
         onboardingStep,
         isOnboardingComplete,
+        storeStatus: storeStatus ?? null,
         hasSeenWelcome: true,
         authMode: null,
       });
     },
 
     logout: async () => {
-      await authService.logout();
-      await clearAuthToken();
-      await clearOnboardingMeta();
-      await clearWelcomeSeen();
+      // API logout is best-effort; fire it alongside local cleanup in parallel.
+      await Promise.allSettled([
+        authService.logout(),
+        clearAuthToken(),
+        clearOnboardingMeta(),
+        clearWelcomeSeen(),
+      ]);
+
+      // Reset all feature stores before clearing auth state
       useOnboardingStore.getState().resetOnboarding();
+      useInventoryStore.getState().reset();
+      useLeadsStore.getState().reset();
+      useProfileStore.getState().reset();
+
       set({ ...initialAuthState, isLoading: false });
     },
 
@@ -115,17 +148,21 @@ export const useAuthStore = create<AuthState>((set, get) => {
           return;
         }
 
-        // Validate token and restore user via /auth/me
-        const user = await authService.getMe();
-        const meta = await loadOnboardingMeta();
-        const hasSeenWelcome = await loadWelcomeSeen();
+        // Warm the in-memory cache so the /auth/me request interceptor skips SecureStore.
+        primeTokenCache(storedToken);
+
+        // Validate token via /auth/me; read local meta in parallel (independent reads).
+        const [user, meta, hasSeenWelcome] = await Promise.all([
+          authService.getMe(),
+          loadOnboardingMeta(),
+          loadWelcomeSeen(),
+        ]);
 
         const onboardingStep = meta?.currentOnboardingStep ?? 1;
         const isOnboardingComplete = meta?.isOnboardingComplete ?? false;
+        const storeStatus = meta?.storeStatus ?? null;
 
-        useOnboardingStore
-          .getState()
-          .hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
+        useOnboardingStore.getState().hydrateOnboardingMeta(onboardingStep, isOnboardingComplete);
 
         set({
           isAuthenticated: true,
@@ -133,6 +170,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
           user,
           onboardingStep,
           isOnboardingComplete,
+          storeStatus,
           hasSeenWelcome,
           isLoading: false,
         });
@@ -141,7 +179,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         await clearAuthToken();
         await clearOnboardingMeta();
         useOnboardingStore.getState().resetOnboarding();
-        set({ isAuthenticated: false, token: null, isLoading: false });
+        set({ isAuthenticated: false, token: null, storeStatus: null, isLoading: false });
       }
     },
 

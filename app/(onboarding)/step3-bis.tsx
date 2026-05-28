@@ -5,14 +5,15 @@ import { StepNavButtons } from '@components/ui/StepNavButtons';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { uploadBISCertificate } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Step2Data } from '@/types/onboarding';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { BackHandler, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CHECKLIST_ITEMS = [
@@ -29,6 +30,22 @@ export default function Step3BisScreen() {
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
 
+  const { execute } = useAsyncAction();
+
+  const handleBack = useCallback(() => {
+    router.replace('/(onboarding)/step2-gst');
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
+
   const [file, setFile] = useState<Step2Data | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -41,7 +58,7 @@ export default function Step3BisScreen() {
   }, []);
 
   const handleNext = async () => {
-    if (!file?.fileName) {
+    if (!file?.fileName || !file?.fileUri) {
       setFileError('Please upload your BIS certificate to continue');
       return;
     }
@@ -50,6 +67,8 @@ export default function Step3BisScreen() {
     setApiError(null);
     setIsSubmitting(true);
     try {
+      // Small delay to ensure file picker is fully dismissed before upload starts
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
       await uploadBISCertificate(file.fileUri, file.fileName);
       setStep3Data(file);
       router.push('/(onboarding)/step4-branding');
@@ -68,7 +87,7 @@ export default function Step3BisScreen() {
       <StatusBar style="dark" />
       <OnboardingScreenHeader
         title="Business Onboarding"
-        onBack={() => router.back()}
+        onBack={handleBack}
       />
 
       <StepProgressBar currentStep={3} totalSteps={5} percentLabel="60% Complete" />
@@ -134,8 +153,8 @@ export default function Step3BisScreen() {
             </Text>
           ) : null}
           <StepNavButtons
-            onBack={() => router.back()}
-            onNext={() => void handleNext()}
+            onBack={handleBack}
+            onNext={() => void execute(handleNext)}
             isLoading={isSubmitting}
           />
         </View>

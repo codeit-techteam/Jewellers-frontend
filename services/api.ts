@@ -3,6 +3,12 @@ import * as SecureStore from 'expo-secure-store';
 
 import { config } from '@constants/config';
 
+type RetryableConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+  /** Set true on a request to skip the automatic one-retry on network errors. */
+  _noRetry?: boolean;
+};
+
 const AUTH_TOKEN_KEY = 'auth_token';
 
 export class ApiError extends Error {
@@ -23,6 +29,10 @@ export function registerUnauthorizedHandler(fn: () => void): void {
   _onUnauthorized = fn;
 }
 
+// In-memory token cache — avoids a SecureStore read on every outgoing request.
+// Kept in sync by setAuthToken / clearAuthToken; warmed on first interceptor miss.
+let _memToken: string | null = null;
+
 export const api = axios.create({
   baseURL: config.apiUrl,
   timeout: 30000,
@@ -34,11 +44,16 @@ export const api = axios.create({
 
 api.interceptors.request.use(
   async (requestConfig: InternalAxiosRequestConfig) => {
-    const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+    // Use the in-memory cache; fall back to SecureStore only on the very first request
+    // after a cold start (before setAuthToken has been called with the restored token).
+    let token = _memToken;
+    if (!token) {
+      token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+      if (token) _memToken = token; // warm cache for subsequent requests
+    }
     if (token && requestConfig.headers) {
       requestConfig.headers.Authorization = `Bearer ${token}`;
     }
-
     return requestConfig;
   },
   (error: AxiosError) => Promise.reject(error),
@@ -58,9 +73,23 @@ api.interceptors.response.use(
     return response;
   },
   async (error: AxiosError<{ message?: string; code?: string }>) => {
+    const config = error.config as RetryableConfig | undefined;
     const status = error.response?.status;
-    const message =
-      error.response?.data?.message ?? error.message ?? 'Something went wrong';
+
+    // Retry once on network/timeout errors (no response from server, not a 4xx/5xx)
+    const isNetworkError =
+      !error.response &&
+      (error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED' ||
+        error.message === 'Network Error');
+
+    if (isNetworkError && config && !config._retry && !config._noRetry) {
+      config._retry = true;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+      return api.request(config);
+    }
+
+    const message = error.response?.data?.message ?? error.message ?? 'Something went wrong';
     const code = error.response?.data?.code;
 
     if (status === 401) {
@@ -72,10 +101,17 @@ api.interceptors.response.use(
   },
 );
 
+/** Populate the in-memory cache without writing to SecureStore (use on cold-start restore). */
+export function primeTokenCache(token: string): void {
+  _memToken = token;
+}
+
 export const setAuthToken = async (token: string): Promise<void> => {
+  _memToken = token;
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 };
 
 export const clearAuthToken = async (): Promise<void> => {
+  _memToken = null;
   await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
 };

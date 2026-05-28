@@ -14,9 +14,23 @@ type RawMeResponse = {
   is_phone_verified: boolean;
 };
 
+// sendOtp / resendOtp are lightweight (no DB write in mock mode) — short timeout,
+// no retry so users get fast feedback on connectivity issues.
+const OTP_SEND_CONFIG = { timeout: 10000, _noRetry: true } as const;
+
+// verifyOtp triggers user lookup, user creation, bcrypt hashing, token storage,
+// and boutique queries — heavier chain that can be slow on a cold Supabase
+// connection. Give it the full 30 s but still skip the auto-retry (retrying a
+// verify with the same code is safe, but we don't want silent double-submits).
+const OTP_VERIFY_CONFIG = { timeout: 30000, _noRetry: true } as const;
+
 export async function sendOtp(countryCode: string, phone: string): Promise<SendOtpResponse> {
   try {
-    const { data } = await api.post<SendOtpResponse>('/auth/send-otp', { phone, countryCode });
+    const { data } = await api.post<SendOtpResponse>(
+      '/auth/send-otp',
+      { phone, countryCode },
+      OTP_SEND_CONFIG,
+    );
     return data;
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -26,7 +40,11 @@ export async function sendOtp(countryCode: string, phone: string): Promise<SendO
 
 export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpResponse> {
   try {
-    const { data } = await api.post<VerifyOtpResponse>('/auth/verify-otp', { phone, otp });
+    const { data } = await api.post<VerifyOtpResponse>(
+      '/auth/verify-otp',
+      { phone, otp },
+      OTP_VERIFY_CONFIG,
+    );
     return data;
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -36,7 +54,11 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
 
 export async function resendOtp(phone: string, countryCode?: string): Promise<SendOtpResponse> {
   try {
-    const { data } = await api.post<SendOtpResponse>('/auth/resend-otp', { phone, countryCode });
+    const { data } = await api.post<SendOtpResponse>(
+      '/auth/resend-otp',
+      { phone, countryCode },
+      OTP_SEND_CONFIG,
+    );
     return data;
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -67,6 +89,8 @@ export async function logout(): Promise<void> {
 export function getResumeRouteForStep(
   isOnboardingComplete: boolean,
   onboardingStep: number,
+  storeStatus?: string,
+  needsSubscription?: boolean,
 ): Href {
-  return getResumeRoute(isOnboardingComplete, onboardingStep);
+  return getResumeRoute(isOnboardingComplete, onboardingStep, storeStatus, needsSubscription);
 }

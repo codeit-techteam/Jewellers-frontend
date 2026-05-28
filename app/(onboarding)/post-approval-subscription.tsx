@@ -1,49 +1,35 @@
-import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
 import { PlanCard } from '@components/subscription/PlanCard';
 import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { ShieldCheckIcon } from '@components/ui/OnboardingIcons';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { useAsyncAction } from '@hooks/useAsyncAction';
-import { chooseSubscription, getStatus } from '@services/onboardingService';
+import { chooseSubscription } from '@services/onboardingService';
 import { handleApiError } from '@utils/handleApiError';
 import { getPlans } from '@services/paymentService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Plan } from '@/types/payment';
-import { navigateBack, RETURN_TO_PROFILE } from '@lib/navigateBack';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function Step5SubscriptionScreen() {
+export default function PostApprovalSubscriptionScreen() {
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const insets = useSafeAreaInsets();
   const { h1, body, label, micro } = useFontScale();
 
   const setStep5Data = useOnboardingStore((state) => state.setStep5Data);
-  const setOnboardingStep = useOnboardingStore((state) => state.setOnboardingStep);
 
   const { execute } = useAsyncAction();
 
-  const handleBack = useCallback(() => {
-    if (returnTo === RETURN_TO_PROFILE) {
-      navigateBack(router, returnTo);
-    } else {
-      router.replace('/(onboarding)/step4-branding');
-    }
-  }, [router, returnTo]);
-
+  // No back allowed — user must choose a plan
   useFocusEffect(
     useCallback(() => {
-      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-        handleBack();
-        return true;
-      });
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
       return () => subscription.remove();
-    }, [handleBack]),
+    }, []),
   );
 
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -54,41 +40,20 @@ export default function Step5SubscriptionScreen() {
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedPlanId = useOnboardingStore.getState().step5?.planId ?? '';
-
-    async function init() {
-      // Guard: if the user already completed subscription (step >= 6), skip straight to products.
-      // Skip this redirect when accessed from the profile (manage-subscription context).
-      if (returnTo !== RETURN_TO_PROFILE) {
-        try {
-          const status = await getStatus();
-          if (status.onboardingStep >= 6) {
-            router.replace('/(onboarding)/step5-products');
-            return;
-          }
-        } catch {
-          // Status check failed — continue to show plans so the user isn't stuck.
-        }
-      }
-
+    async function loadPlans() {
       try {
         const fetched = await getPlans();
         setPlans(fetched);
-        // Restore previously selected plan or default to the second plan (Pro tier)
-        const defaultId =
-          savedPlanId && fetched.some((p) => p.id === savedPlanId)
-            ? savedPlanId
-            : fetched[1]?.id ?? fetched[0]?.id ?? '';
-        setSelectedPlanId(defaultId);
+        // Default to Pro tier (second plan)
+        setSelectedPlanId(fetched[1]?.id ?? fetched[0]?.id ?? '');
       } catch (err) {
         setPlansError(handleApiError(err));
       } finally {
         setIsLoadingPlans(false);
       }
     }
-
-    void init();
-  }, [router]);
+    void loadPlans();
+  }, []);
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId);
   const isFreeSelected = (selectedPlan?.monthlyPrice ?? -1) === 0;
@@ -99,16 +64,8 @@ export default function Step5SubscriptionScreen() {
     setApiError(null);
     setIsProcessing(true);
     try {
-      const response = await chooseSubscription(selectedPlan.id, 'monthly');
-      setStep5Data({
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        price: 0,
-        billingCycle: 'monthly',
-      });
-      // Persist the server-confirmed onboarding step (should be 6) locally
-      setOnboardingStep(response.onboardingStep ?? 6);
-      router.replace('/(onboarding)/step5-products');
+      await chooseSubscription(selectedPlan.id, 'monthly');
+      router.replace('/(app)');
     } catch (error) {
       setApiError(handleApiError(error));
     } finally {
@@ -140,11 +97,14 @@ export default function Step5SubscriptionScreen() {
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />
-      <View className="px-5">
-        <OnboardingScreenHeader
-          title="Subscription Plans"
-          onBack={handleBack}
-        />
+
+      <View className="px-5 pb-2 pt-2">
+        <Text className="text-center font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
+          Choose Your Plan
+        </Text>
+        <Text className="mt-2 text-center" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+          Your store is live! Select a plan to unlock more features.
+        </Text>
       </View>
 
       <ScrollView
@@ -152,17 +112,7 @@ export default function Step5SubscriptionScreen() {
         contentContainerStyle={{ paddingBottom: 16 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-center font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
-          Empower Your Jewelry Business
-        </Text>
-        <Text
-          className="mt-2 text-center"
-          style={{ fontSize: body, color: colors.BODY_TEXT }}
-        >
-          Choose a plan that fits your scale and ambition
-        </Text>
-
-        <View className="mt-6">
+        <View className="mt-4">
           {isLoadingPlans ? (
             <ActivityIndicator size="large" color={colors.NAVY} style={{ marginVertical: 40 }} />
           ) : plansError ? (
@@ -199,10 +149,7 @@ export default function Step5SubscriptionScreen() {
             </Text>
           </View>
           <View className="mt-2 flex-row items-center justify-between">
-            <View
-              className="rounded px-2 py-1"
-              style={{ backgroundColor: colors.INFO_BG }}
-            >
+            <View className="rounded px-2 py-1" style={{ backgroundColor: colors.INFO_BG }}>
               <Text className="font-bold" style={{ fontSize: micro, color: colors.NAVY }}>
                 RAZORPAY
               </Text>

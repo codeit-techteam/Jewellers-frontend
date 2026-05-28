@@ -3,7 +3,9 @@ import { OtpInput } from '@components/ui/OtpInput';
 import { PrimaryButton } from '@components/ui/PrimaryButton';
 /* eslint-disable react-hooks/immutability -- Reanimated shared values */
 import { colors } from '@constants/colors';
+import { config } from '@constants/config';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { resendOtp, verifyOtp } from '@services/authService';
@@ -41,6 +43,8 @@ export default function VerifyScreen() {
   const [isResending, setIsResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(TIMER_SECONDS);
   const [resetKey, setResetKey] = useState(0);
+
+  const { execute } = useAsyncAction();
 
   const shakeX = useSharedValue(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -131,10 +135,14 @@ export default function VerifyScreen() {
         response.user,
         response.onboardingStep,
         response.isOnboardingComplete,
+        response.storeStatus ?? null,
+        response.needsSubscription,
       );
       const resumeRoute = getResumeRoute(
         response.isOnboardingComplete,
         response.onboardingStep,
+        response.storeStatus ?? undefined,
+        response.needsSubscription,
       );
       router.replace(resumeRoute);
     } catch (error) {
@@ -175,7 +183,10 @@ export default function VerifyScreen() {
   return (
     <View
       className="flex-1 bg-white px-6"
-      style={{ paddingTop: insets.top + height * 0.01, paddingBottom: insets.bottom + height * 0.02 }}
+      style={{
+        paddingTop: insets.top + height * 0.01,
+        paddingBottom: insets.bottom + height * 0.02,
+      }}
     >
       <StatusBar style="dark" />
 
@@ -206,6 +217,30 @@ export default function VerifyScreen() {
             <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>✎ </Text>
             <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>Change Number</Text>
           </Pressable>
+
+          {config.isDev && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(201,168,76,0.12)',
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                marginTop: 16,
+                gap: 6,
+                borderWidth: 1,
+                borderColor: 'rgba(201,168,76,0.35)',
+              }}
+            >
+              <Text style={{ fontSize: label, color: '#92700A' }}>
+                🛠 Dev — mock OTP:{' '}
+                <Text style={{ fontWeight: '700', letterSpacing: 2, color: '#92700A' }}>
+                  123456
+                </Text>
+              </Text>
+            </View>
+          )}
 
           <Animated.View style={shakeStyle} className="mt-8 w-full">
             <OtpInput
@@ -268,7 +303,7 @@ export default function VerifyScreen() {
             showArrow
             isLoading={isVerifying}
             disabled={!isOtpComplete || isVerifying}
-            onPress={() => void handleVerify(otp)}
+            onPress={() => void execute(() => handleVerify(otp))}
           />
           <View className="mt-5 flex-row items-center justify-center">
             <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>🔒 </Text>

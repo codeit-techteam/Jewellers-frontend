@@ -24,6 +24,7 @@ export type VerifyOtpResponse = {
   onboardingStep: number;
   isOnboardingComplete: boolean;
   storeStatus: string | null;
+  needsSubscription?: boolean;
   isNewUser: boolean;
 };
 

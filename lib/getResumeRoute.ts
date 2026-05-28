@@ -3,13 +3,23 @@ import type { Href } from 'expo-router';
 /**
  * Returns the route a jeweller should land on based on onboarding progress.
  * storeStatus takes priority over step number when it indicates a terminal state.
+ * needsSubscription is only relevant when storeStatus === 'approved'.
  */
 export function getResumeRoute(
   isOnboardingComplete: boolean,
   currentStep: number,
   storeStatus?: string,
+  needsSubscription?: boolean,
 ): Href {
-  if (isOnboardingComplete || storeStatus === 'approved') {
+  if (storeStatus === 'approved') {
+    // Store approved but plan not yet chosen → subscription selection
+    if (needsSubscription) {
+      return '/(onboarding)/post-approval-subscription';
+    }
+    return '/(app)';
+  }
+
+  if (isOnboardingComplete) {
     return '/(app)';
   }
 
@@ -27,7 +37,6 @@ export function getResumeRoute(
     case 4:
       return '/(onboarding)/step4-branding';
     case 5:
-      return '/(onboarding)/step5-subscription';
     case 6:
       return '/(onboarding)/step5-products';
     case 7:

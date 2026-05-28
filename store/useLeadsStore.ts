@@ -16,6 +16,7 @@ type LeadsStoreState = {
   updateLeadStatus: (id: string, status: LeadStatus) => void;
   setLeads: (leads: Lead[]) => void;
   resetToInitial: () => void;
+  reset: () => void;
 };
 
 export function isUpcomingLead(lead: Lead): boolean {
@@ -42,6 +43,13 @@ export const useLeadsStore = create<LeadsStoreState>((set) => ({
   setLeads: (leads) => set({ leads }),
 
   resetToInitial: () =>
+    set({
+      leads: [],
+      activeFilter: 'all',
+      searchQuery: '',
+    }),
+
+  reset: () =>
     set({
       leads: [],
       activeFilter: 'all',

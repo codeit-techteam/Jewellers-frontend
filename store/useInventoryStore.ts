@@ -17,6 +17,7 @@ type InventoryStoreState = {
   incrementWaClick: (id: string) => void;
   setLoading: (loading: boolean) => void;
   clearProducts: () => void;
+  reset: () => void;
 };
 
 const incrementAnalytics = (
@@ -97,6 +98,8 @@ export const useInventoryStore = create<InventoryStoreState>((set) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   clearProducts: () => set({ products: [], isLoading: false }),
+
+  reset: () => set({ products: [], isLoading: false, selectedCategory: 'All' }),
 }));
 
 export function getTotalViews(products: InventoryProduct[]): number {

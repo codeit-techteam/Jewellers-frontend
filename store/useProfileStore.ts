@@ -17,6 +17,7 @@ type ProfileStoreState = {
   applyStoreProfile: (store: StoreProfile) => void;
   syncFromOnboarding: () => void;
   resetToInitial: () => void;
+  reset: () => void;
 };
 
 export const useProfileStore = create<ProfileStoreState>((set) => ({
@@ -50,6 +51,13 @@ export const useProfileStore = create<ProfileStoreState>((set) => ({
     }),
 
   resetToInitial: () =>
+    set({
+      profile: createInitialProfile(),
+      documents: [],
+      isLoading: false,
+    }),
+
+  reset: () =>
     set({
       profile: createInitialProfile(),
       documents: [],

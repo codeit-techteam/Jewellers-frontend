@@ -4,14 +4,15 @@ import { StepNavButtons } from '@components/ui/StepNavButtons';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { uploadGSTCertificate } from '@services/onboardingService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import type { Step2Data } from '@/types/onboarding';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { BackHandler, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Step2GstScreen() {
@@ -22,6 +23,22 @@ export default function Step2GstScreen() {
   const setStep2Data = useOnboardingStore((state) => state.setStep2Data);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
+
+  const { execute } = useAsyncAction();
+
+  const handleBack = useCallback(() => {
+    router.replace('/(onboarding)/step1-business-info');
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
 
   const [file, setFile] = useState<Step2Data | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -35,7 +52,7 @@ export default function Step2GstScreen() {
   }, []);
 
   const handleNext = async () => {
-    if (!file?.fileName) {
+    if (!file?.fileName || !file?.fileUri) {
       setFileError('Please upload your GST certificate to continue');
       return;
     }
@@ -44,6 +61,8 @@ export default function Step2GstScreen() {
     setApiError(null);
     setIsSubmitting(true);
     try {
+      // Small delay to ensure file picker is fully dismissed before upload starts
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
       await uploadGSTCertificate(file.fileUri, file.fileName);
       setStep2Data(file);
       router.push('/(onboarding)/step3-bis');
@@ -62,7 +81,7 @@ export default function Step2GstScreen() {
       <StatusBar style="dark" />
       <OnboardingScreenHeader
         title="Business Onboarding"
-        onBack={() => router.back()}
+        onBack={handleBack}
       />
 
       <StepProgressBar currentStep={2} totalSteps={5} percentLabel="40% Complete" />
@@ -94,8 +113,8 @@ export default function Step2GstScreen() {
             </Text>
           ) : null}
           <StepNavButtons
-            onBack={() => router.back()}
-            onNext={() => void handleNext()}
+            onBack={handleBack}
+            onNext={() => void execute(handleNext)}
             isLoading={isSubmitting}
           />
         </View>

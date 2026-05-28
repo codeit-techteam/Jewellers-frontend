@@ -1,7 +1,7 @@
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, Text, View } from 'react-native';
 import Animated, { FadeInUp, ZoomIn } from 'react-native-reanimated';
@@ -17,12 +17,8 @@ export default function StoreLiveScreen() {
 
   const heroHeight = height * 0.4;
 
-  const handleGoToDashboard = () => {
-    router.replace('/(app)');
-  };
-
-  const handleViewStore = () => {
-    router.replace('/(app)/my-live-store' as Href);
+  const handleContinue = () => {
+    router.replace('/(onboarding)/post-approval-subscription');
   };
 
   return (
@@ -32,18 +28,10 @@ export default function StoreLiveScreen() {
     >
       <StatusBar style="dark" />
 
-      <View className="mb-4 flex-row items-center">
-        <Pressable
-          onPress={handleGoToDashboard}
-          className="h-10 w-10 items-center justify-center rounded-full"
-          style={{ backgroundColor: colors.SURFACE_MUTED }}
-          accessibilityLabel="Go to dashboard"
-        >
-          <Ionicons name="close" size={width * 0.06} color={colors.NAVY} />
-        </Pressable>
+      <View className="mb-4 flex-row items-center justify-center">
         <Text
           className="flex-1 text-center font-semibold"
-          style={{ fontSize: body * 1.15, color: colors.NAVY, marginRight: width * 0.1 }}
+          style={{ fontSize: body * 1.15, color: colors.NAVY }}
         >
           Store is Live!
         </Text>
@@ -97,26 +85,14 @@ export default function StoreLiveScreen() {
       <View className="flex-1" />
 
       <Pressable
-        onPress={handleGoToDashboard}
-        className="mb-3 items-center justify-center rounded-xl py-4"
+        onPress={handleContinue}
+        className="items-center justify-center rounded-xl py-4"
         style={{ backgroundColor: colors.NAVY }}
         accessibilityRole="button"
-        accessibilityLabel="Go to Dashboard"
+        accessibilityLabel="Choose Your Plan"
       >
         <Text className="font-semibold" style={{ fontSize: button, color: colors.WHITE }}>
-          Go to Dashboard
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={handleViewStore}
-        className="items-center justify-center rounded-xl border py-4"
-        style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-        accessibilityRole="button"
-        accessibilityLabel="View My Live Store"
-      >
-        <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
-          View My Live Store
+          Choose Your Plan →
         </Text>
       </Pressable>
     </View>

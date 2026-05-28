@@ -2,7 +2,9 @@ import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenH
 import { colors } from '@constants/colors';
 import { MIN_PRODUCTS_REQUIRED, PRODUCT_UPLOAD_BENEFITS } from '@constants/products';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
+import { loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
 import { submitForReview } from '@services/onboardingService';
 import { getProducts, removeProductApi } from '@services/inventoryService';
 import { useOnboardingStore } from '@store/useOnboardingStore';
@@ -15,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Step5ProductsScreen() {
@@ -25,6 +27,25 @@ export default function Step5ProductsScreen() {
 
   const setIsSubmitting = useOnboardingStore((state) => state.setIsSubmitting);
   const isSubmitting = useOnboardingStore((state) => state.isSubmitting);
+
+  const { execute } = useAsyncAction();
+
+  const handleBack = useCallback(() => {
+    void dialog.confirm('Go Back?', 'Added products will be saved.', {
+      confirmText: 'Go Back',
+      onConfirm: () => router.replace('/(onboarding)/step4-branding'),
+    });
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
 
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
@@ -89,6 +110,18 @@ export default function Step5ProductsScreen() {
     setIsSubmitting(true);
     try {
       const result = await submitForReview();
+
+      if (result.submitted || result.autoApproved) {
+        // Persist the new storeStatus so SecureStore stays accurate for offline fallback.
+        const existing = await loadOnboardingMeta();
+        void saveOnboardingMeta({
+          ...existing,
+          currentOnboardingStep: existing?.currentOnboardingStep ?? 7,
+          isOnboardingComplete: false,
+          storeStatus: result.autoApproved ? 'approved' : 'review',
+        });
+      }
+
       if (result.autoApproved) {
         router.replace('/(onboarding)/store-live');
       } else if (result.submitted) {
@@ -110,7 +143,7 @@ export default function Step5ProductsScreen() {
 
       {/* ── Header ── */}
       <View className="px-5">
-        <OnboardingScreenHeader title="Add Your Products" onBack={() => router.back()} />
+        <OnboardingScreenHeader title="Add Your Products" onBack={handleBack} />
         <Text
           className="mb-2 text-right uppercase tracking-wider"
           style={{ fontSize: micro, color: colors.BODY_TEXT }}
@@ -329,7 +362,7 @@ export default function Step5ProductsScreen() {
         ) : null}
 
         <Pressable
-          onPress={() => void handleLaunch()}
+          onPress={() => void execute(handleLaunch)}
           disabled={!canLaunch || isSubmitting}
           className="flex-row items-center justify-center rounded-xl py-4"
           style={{

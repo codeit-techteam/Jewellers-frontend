@@ -1,4 +1,5 @@
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
+import { ExitOnboardingModal } from '@components/ui/ExitOnboardingModal';
 import { FormTextField } from '@components/ui/FormTextField';
 import {
   LocationIcon,
@@ -11,6 +12,7 @@ import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { StepProgressBar } from '@components/ui/StepProgressBar';
 import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
+import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
 import { submitBusinessInfo } from '@services/onboardingService';
@@ -20,13 +22,14 @@ import { useOnboardingStore } from '@store/useOnboardingStore';
 import { formatPhoneDisplay } from '@utils/formatPhone';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -75,6 +78,33 @@ export default function Step1BusinessInfoScreen() {
   const verifiedPhoneDisplay = verifiedContactNumber
     ? formatPhoneDisplay(countryCode ?? '+91', verifiedContactNumber)
     : '';
+
+  const { execute } = useAsyncAction();
+  const [showExitModal, setShowExitModal] = useState(false);
+  const currentOnboardingStep = useOnboardingStore((state) => state.currentOnboardingStep);
+
+  const handleBack = useCallback(() => {
+    setShowExitModal(true);
+  }, []);
+
+  const handleExitConfirm = useCallback(() => {
+    setShowExitModal(false);
+    if (currentOnboardingStep <= 1) {
+      router.replace('/');
+    } else {
+      router.replace('/(onboarding)/resume-choice');
+    }
+  }, [currentOnboardingStep, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
 
   const [locality, setLocality] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
@@ -164,12 +194,13 @@ export default function Step1BusinessInfoScreen() {
   };
 
   return (
+    <>
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />
       <View className="px-5">
         <OnboardingScreenHeader
           title="Onboarding"
-          onBack={() => router.replace('/(auth)/login')}
+          onBack={handleBack}
         />
 
         <View className="mb-3 flex-row items-start justify-between">
@@ -315,7 +346,8 @@ export default function Step1BusinessInfoScreen() {
             label="Next Step"
             showArrow
             isLoading={isSubmitting}
-            onPress={handleSubmit(onSubmit)}
+            disabled={isSubmitting}
+            onPress={() => void execute(async () => handleSubmit(onSubmit)())}
           />
           {apiError ? (
             <Text className="mt-2 text-center" style={{ fontSize: label, color: colors.ERROR }}>
@@ -336,5 +368,13 @@ export default function Step1BusinessInfoScreen() {
         </View>
       </KeyboardAvoidingView>
     </View>
+
+    <ExitOnboardingModal
+      visible={showExitModal}
+      onClose={() => setShowExitModal(false)}
+      onExit={handleExitConfirm}
+      currentStep={currentOnboardingStep}
+    />
+    </>
   );
 }

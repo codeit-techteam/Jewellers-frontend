@@ -1,17 +1,16 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@store/useAuthStore';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ImageBackground, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Ring-only photo — not the full UI mockup (onboarding-bg.png)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const onboardingBackground = require('@assets/images/onboarding-ring-bg.jpg') as number;
 
-export default function OnboardingScreen() {
+export default function LandingScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
