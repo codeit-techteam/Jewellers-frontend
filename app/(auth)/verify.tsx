@@ -8,10 +8,11 @@ import { useFontScale } from '@hooks/useFontScale';
 import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
 import { getResumeRoute } from '@lib/getResumeRoute';
+import { loadOtpSession } from '@lib/otpSession';
 import { resendOtp, verifyOtp } from '@services/authService';
 import { useAuthStore } from '@store/useAuthStore';
 import { formatPhoneDisplay, formatTimerValue } from '@utils/formatPhone';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -31,10 +32,22 @@ export default function VerifyScreen() {
   const insets = useSafeAreaInsets();
   const { width, height, h1, h2, body, label, micro } = useFontScale();
 
-  const phoneNumber = useAuthStore((state) => state.phoneNumber);
-  const countryCode = useAuthStore((state) => state.countryCode);
+  const params = useLocalSearchParams<{ phone?: string; countryCode?: string }>();
+  const storePhone = useAuthStore((state) => state.phoneNumber);
+  const storeCountryCode = useAuthStore((state) => state.countryCode);
+  const setPhoneForOtp = useAuthStore((state) => state.setPhoneForOtp);
   const setAuthSuccess = useAuthStore((state) => state.setAuthSuccess);
   const clearOtpSession = useAuthStore((state) => state.clearOtpSession);
+
+  const [resolvedPhone, setResolvedPhone] = useState<string | null>(
+    params.phone ?? storePhone ?? null,
+  );
+  const [resolvedCountryCode, setResolvedCountryCode] = useState<string | null>(
+    params.countryCode ?? storeCountryCode ?? null,
+  );
+  const [isResolvingSession, setIsResolvingSession] = useState(
+    !(params.phone && params.countryCode) && !(storePhone && storeCountryCode),
+  );
 
   const [otp, setOtp] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
@@ -48,6 +61,37 @@ export default function VerifyScreen() {
 
   const shakeX = useSharedValue(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Hydrate OTP session from route params, Zustand, or SecureStore (survives logout races).
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      let phone = params.phone ?? storePhone ?? null;
+      let countryCode = params.countryCode ?? storeCountryCode ?? null;
+
+      if (!phone || !countryCode) {
+        const persisted = await loadOtpSession();
+        phone = phone ?? persisted?.phone ?? null;
+        countryCode = countryCode ?? persisted?.countryCode ?? null;
+      }
+
+      if (cancelled) return;
+
+      if (phone && countryCode) {
+        setResolvedPhone(phone);
+        setResolvedCountryCode(countryCode);
+        if (!storePhone || !storeCountryCode) {
+          setPhoneForOtp(phone, countryCode);
+        }
+      }
+      setIsResolvingSession(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.phone, params.countryCode, storePhone, storeCountryCode, setPhoneForOtp]);
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
@@ -122,26 +166,28 @@ export default function VerifyScreen() {
   };
 
   const handleVerify = async (code: string) => {
-    if (!phoneNumber || code.length !== OTP_LENGTH) {
+    if (!resolvedPhone || code.length !== OTP_LENGTH) {
       return;
     }
     setApiError(null);
     setHasError(false);
     setIsVerifying(true);
     try {
-      const response = await verifyOtp(phoneNumber, code);
-      await setAuthSuccess(
+      const response = await verifyOtp(resolvedPhone, code);
+      const resumeRoute = getResumeRoute(
+        response.isOnboardingComplete,
+        response.onboardingStep,
+        response.storeStatus ?? undefined,
+        response.needsSubscription,
+      );
+
+      // Navigate immediately — setAuthSuccess updates in-memory session first.
+      void setAuthSuccess(
         response.token,
         response.user,
         response.onboardingStep,
         response.isOnboardingComplete,
         response.storeStatus ?? null,
-        response.needsSubscription,
-      );
-      const resumeRoute = getResumeRoute(
-        response.isOnboardingComplete,
-        response.onboardingStep,
-        response.storeStatus ?? undefined,
         response.needsSubscription,
       );
       router.replace(resumeRoute);
@@ -155,14 +201,14 @@ export default function VerifyScreen() {
   };
 
   const handleResend = async () => {
-    if (!phoneNumber || !canResend || isResending) {
+    if (!resolvedPhone || !canResend || isResending) {
       return;
     }
     setApiError(null);
     setHasError(false);
     setIsResending(true);
     try {
-      await resendOtp(phoneNumber);
+      await resendOtp(resolvedPhone);
       setOtp('');
       setResetKey((k) => k + 1);
       startTimer();
@@ -173,11 +219,15 @@ export default function VerifyScreen() {
     }
   };
 
-  if (!phoneNumber || !countryCode) {
+  if (isResolvingSession) {
+    return null;
+  }
+
+  if (!resolvedPhone || !resolvedCountryCode) {
     return <Redirect href="/(auth)/login" />;
   }
 
-  const displayPhone = formatPhoneDisplay(countryCode, phoneNumber);
+  const displayPhone = formatPhoneDisplay(resolvedCountryCode, resolvedPhone);
   const isOtpComplete = otp.length === OTP_LENGTH;
 
   return (

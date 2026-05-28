@@ -33,6 +33,16 @@ export function registerUnauthorizedHandler(fn: () => void): void {
 // Kept in sync by setAuthToken / clearAuthToken; warmed on first interceptor miss.
 let _memToken: string | null = null;
 
+/** True while a bearer token is considered active — stale 401s after logout are ignored. */
+let _sessionActive = false;
+
+/** True during intentional logout — prevents 401 on /auth/logout from re-triggering logout. */
+let _isLoggingOut = false;
+
+export function setLoggingOut(value: boolean): void {
+  _isLoggingOut = value;
+}
+
 export const api = axios.create({
   baseURL: config.apiUrl,
   timeout: 30000,
@@ -93,8 +103,17 @@ api.interceptors.response.use(
     const code = error.response?.data?.code;
 
     if (status === 401) {
-      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
-      _onUnauthorized?.();
+      const requestUrl = config?.url ?? '';
+      const isLogoutRequest = requestUrl.includes('/auth/logout');
+
+      // Only force a session reset when we still believe the user is signed in.
+      // Ignores stale in-flight 401s after logout and breaks the logout→401→logout loop.
+      if (_sessionActive && !_isLoggingOut && !isLogoutRequest) {
+        _sessionActive = false;
+        _memToken = null;
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        _onUnauthorized?.();
+      }
     }
 
     return Promise.reject(new ApiError(message, status, code));
@@ -104,14 +123,17 @@ api.interceptors.response.use(
 /** Populate the in-memory cache without writing to SecureStore (use on cold-start restore). */
 export function primeTokenCache(token: string): void {
   _memToken = token;
+  _sessionActive = true;
 }
 
 export const setAuthToken = async (token: string): Promise<void> => {
   _memToken = token;
+  _sessionActive = true;
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 };
 
 export const clearAuthToken = async (): Promise<void> => {
   _memToken = null;
+  _sessionActive = false;
   await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
 };

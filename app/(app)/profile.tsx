@@ -11,9 +11,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
 import { useAuthStore } from '@store/useAuthStore';
-import { useOnboardingStore } from '@store/useOnboardingStore';
-import { useInventoryStore } from '@store/useInventoryStore';
-import { useLeadsStore } from '@store/useLeadsStore';
 import { useProfileStore } from '@store/useProfileStore';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -105,11 +102,7 @@ export default function ProfileScreen() {
   const documents = useProfileStore((state) => state.documents);
   const applyStoreProfile = useProfileStore((state) => state.applyStoreProfile);
   const updateProfile = useProfileStore((state) => state.updateProfile);
-  const resetProfile = useProfileStore((state) => state.resetToInitial);
   const logout = useAuthStore((state) => state.logout);
-  const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
-  const clearInventory = useInventoryStore((state) => state.clearProducts);
-  const resetLeads = useLeadsStore((state) => state.resetToInitial);
 
   const planName = profile.plan ?? 'Free Plan';
   const isPaidPlan = planName.toLowerCase() !== 'free' && planName.toLowerCase() !== 'free plan';
@@ -247,10 +240,7 @@ export default function ProfileScreen() {
       confirmText: 'Logout',
       onConfirm: async () => {
         await logout();
-        resetOnboarding();
-        clearInventory();
-        resetLeads();
-        resetProfile();
+        queryClient.clear();
         router.replace('/');
       },
     });

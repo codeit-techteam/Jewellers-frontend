@@ -62,7 +62,10 @@ export default function LoginScreen() {
       setAuthFlowMode(isRegisterMode ? 'register' : 'login');
       await sendOtp(selectedCountry.dial, values.phone);
       setPhoneForOtp(values.phone, selectedCountry.dial);
-      router.push('/(auth)/verify');
+      router.push({
+        pathname: '/(auth)/verify',
+        params: { phone: values.phone, countryCode: selectedCountry.dial },
+      });
     } catch (error) {
       setApiError(handleApiError(error));
     } finally {

@@ -4,6 +4,7 @@ import { AuthBootstrap } from '@components/auth/AuthBootstrap';
 import { DialogProvider } from '@providers/DialogProvider';
 import { QueryProvider } from '@providers/QueryProvider';
 import { getStatus } from '@services/onboardingService';
+import { onAuthReset } from '@lib/authEvents';
 import { loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { useAppStore } from '@store/useAppStore';
@@ -34,16 +35,27 @@ export default function RootLayout() {
     void checkPersistedAuth();
   }, [checkPersistedAuth]);
 
+  // Allow post-logout re-login to re-run the authenticated cold-start router.
+  useEffect(() => {
+    return onAuthReset(() => {
+      hasRoutedRef.current = false;
+    });
+  }, []);
+
   // After auth settles: route immediately using local persisted state (no network wait),
   // hide the splash, then silently validate with the server in the background.
   useEffect(() => {
-    if (isLoading || hasRoutedRef.current) return;
-    hasRoutedRef.current = true;
+    if (isLoading) return;
 
     if (!isAuthenticated) {
+      if (hasRoutedRef.current) return;
+      hasRoutedRef.current = true;
       void SplashScreen.hideAsync();
       return;
     }
+
+    if (hasRoutedRef.current) return;
+    hasRoutedRef.current = true;
 
     void (async () => {
       // ── Phase 1: instant routing from local state ──────────────────────────
