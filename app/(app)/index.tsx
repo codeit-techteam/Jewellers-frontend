@@ -175,7 +175,6 @@ export default function DashboardScreen() {
     const rows = productAnalyticsQuery.data ?? [];
     const merged: InventoryProduct[] = [];
     for (const row of rows) {
-      if (row.views <= 0) continue;
       const product = productById.get(row.productId);
       if (product && !product.isDraft) {
         merged.push({
