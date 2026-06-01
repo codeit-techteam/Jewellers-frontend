@@ -2,6 +2,8 @@ export const colors = {
   NAVY: '#1B2B4B',
   GOLD: '#C9A84C',
   CREAM: '#F5F0E8',
+  /** Lighter cream for dashboard / spacious layouts */
+  CREAM_LIGHT: '#FBFAF7',
   BORDER: '#E5E7EB',
   BODY_TEXT: '#6B7280',
   SUCCESS: '#10B981',

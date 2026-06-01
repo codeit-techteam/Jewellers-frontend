@@ -3,7 +3,13 @@ import type { AnalyticsOverview, AnalyticsRange, ProductAnalyticsRow, StoreAnaly
 import { api, ApiError } from './api';
 
 type BackendOverview = {
-  views: number;
+  views?: number;
+  storeViews?: number;
+  store_views?: number;
+  productViews?: number;
+  product_views?: number;
+  uniqueVisitors?: number;
+  unique_visitors?: number;
   wishlist: number;
   inquiry: number;
   wa_clicks?: number;
@@ -15,8 +21,14 @@ type BackendOverview = {
 };
 
 function mapOverview(data: BackendOverview): AnalyticsOverview {
+  const storeViews = data.storeViews ?? data.store_views ?? 0;
+  const productViews = data.productViews ?? data.product_views ?? 0;
+  const views = data.views ?? storeViews + productViews;
   return {
-    views: data.views ?? 0,
+    views,
+    storeViews,
+    productViews,
+    uniqueVisitors: data.uniqueVisitors ?? data.unique_visitors ?? 0,
     wishlist: data.wishlist ?? 0,
     inquiry: data.inquiry ?? 0,
     waClicks: data.waClicks ?? data.wa_clicks ?? 0,
@@ -39,9 +51,13 @@ export async function getOverview(range: AnalyticsRange = 'today'): Promise<Anal
   }
 }
 
-export async function getProductAnalytics(): Promise<ProductAnalyticsRow[]> {
+export async function getProductAnalytics(
+  range: AnalyticsRange = 'today',
+): Promise<ProductAnalyticsRow[]> {
   try {
-    const { data } = await api.get<ProductAnalyticsRow[]>('/analytics/products');
+    const { data } = await api.get<ProductAnalyticsRow[]>('/analytics/products', {
+      params: { range },
+    });
     return Array.isArray(data) ? data : [];
   } catch (error) {
     if (error instanceof ApiError) throw error;

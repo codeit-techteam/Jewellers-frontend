@@ -19,12 +19,11 @@ import { StatusBar } from 'expo-status-bar';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type NotificationFilter = 'All' | 'Orders' | 'Leads' | 'System';
+type NotificationFilter = 'All' | 'Leads' | 'System';
 
-const FILTER_PILLS: NotificationFilter[] = ['All', 'Orders', 'Leads', 'System'];
+const FILTER_PILLS: NotificationFilter[] = ['All', 'Leads', 'System'];
 
 function filterTypeForPill(pill: NotificationFilter): string | undefined {
-  if (pill === 'Orders') return 'order';
   if (pill === 'Leads') return 'lead';
   return undefined;
 }

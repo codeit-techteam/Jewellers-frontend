@@ -3,6 +3,7 @@ import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
 import { INVENTORY_DRAFTS_FILTER } from '@constants/inventory';
+import { INVENTORY_SORT_OPTIONS } from '@constants/inventoryFilters';
 import { useCategories } from '@hooks/useCategories';
 import { formatCategoryName } from '@utils/categoryLabel';
 import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
@@ -12,6 +13,7 @@ import { useInventoryStore } from '@store/useInventoryStore';
 import type { InventoryProduct } from '@/types/inventory';
 import { formatInr } from '@utils/formatCurrency';
 import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
+import { applyInventoryListFilters } from '@utils/inventorySortFilter';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,6 +22,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -204,10 +207,13 @@ export default function InventoryScreen() {
   const micro = width * 0.028;
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortModalVisible, setSortModalVisible] = useState(false);
 
   const products = useInventoryStore((state) => state.products);
   const selectedCategory = useInventoryStore((state) => state.selectedCategory);
+  const listPrefs = useInventoryStore((state) => state.listPrefs);
   const setCategory = useInventoryStore((state) => state.setCategory);
+  const setListPrefs = useInventoryStore((state) => state.setListPrefs);
   const setProducts = useInventoryStore((state) => state.setProducts);
   const removeProduct = useInventoryStore((state) => state.removeProduct);
 
@@ -247,19 +253,25 @@ export default function InventoryScreen() {
     }
   }, [selectedCategory, setCategory]);
 
-  const filteredProducts = useMemo(() => {
-    let list = products.filter(
-      (product) => !product.isDraft && matchesCategoryFilter(product, selectedCategory),
-    );
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q),
-    );
-  }, [products, selectedCategory, searchQuery]);
+  const filteredProducts = useMemo(
+    () =>
+      applyInventoryListFilters(
+        products,
+        {
+          sortBy: listPrefs.sortBy,
+          statusFilter: 'all',
+          featuredOnly: false,
+          recentlyAddedOnly: false,
+          categoryId: selectedCategory,
+          searchQuery,
+        },
+        matchesCategoryFilter,
+      ),
+    [products, listPrefs.sortBy, selectedCategory, searchQuery],
+  );
+
+  const activeSortLabel =
+    INVENTORY_SORT_OPTIONS.find((o) => o.key === listPrefs.sortBy)?.label ?? 'Sort';
 
   const handleRemove = (product: InventoryProduct) => {
     void dialog.confirm(
@@ -327,7 +339,20 @@ export default function InventoryScreen() {
         </View>
       </View>
 
-      <View style={{ flexGrow: 0, marginTop: 16 }}>
+      <View className="mt-3 px-5">
+        <Pressable
+          onPress={() => setSortModalVisible(true)}
+          className="flex-row items-center justify-center rounded-full border py-2.5"
+          style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
+        >
+          <Ionicons name="swap-vertical-outline" size={16} color={colors.NAVY} />
+          <Text className="ml-1 font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
+            Sort: {activeSortLabel}
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={{ flexGrow: 0, marginTop: 12 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -397,9 +422,9 @@ export default function InventoryScreen() {
             <Text className="mt-3 text-center" style={{ fontSize: body, color: colors.BODY_TEXT }}>
               {searchQuery.trim()
                 ? 'No products match your search'
-                : selectedCategory === 'All'
-                  ? 'No products yet — add your first piece'
-                  : 'No products in this category'}
+                : selectedCategory !== 'All'
+                  ? 'No products in this category'
+                  : 'No products yet — add your first piece'}
             </Text>
             <Pressable
               onPress={() =>
@@ -461,6 +486,36 @@ export default function InventoryScreen() {
       >
         <Ionicons name="add" size={28} color={colors.WHITE} />
       </Pressable>
+
+      <Modal visible={sortModalVisible} transparent animationType="fade" onRequestClose={() => setSortModalVisible(false)}>
+        <Pressable
+          className="flex-1 justify-end"
+          style={{ backgroundColor: colors.OVERLAY_DARK }}
+          onPress={() => setSortModalVisible(false)}
+        >
+          <Pressable className="rounded-t-2xl bg-white px-5 pb-8 pt-4" onPress={(e) => e.stopPropagation()}>
+            <Text className="mb-3 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
+              Sort By
+            </Text>
+            {INVENTORY_SORT_OPTIONS.map((option) => (
+              <Pressable
+                key={option.key}
+                onPress={() => {
+                  setListPrefs({ sortBy: option.key });
+                  setSortModalVisible(false);
+                }}
+                className="flex-row items-center justify-between border-b py-3"
+                style={{ borderColor: colors.BORDER }}
+              >
+                <Text style={{ fontSize: body, color: colors.NAVY }}>{option.label}</Text>
+                {listPrefs.sortBy === option.key ? (
+                  <Ionicons name="checkmark" size={20} color={colors.GOLD} />
+                ) : null}
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

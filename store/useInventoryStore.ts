@@ -1,12 +1,22 @@
+import type { InventorySortKey, InventoryStatusFilter } from '@constants/inventoryFilters';
 import { trackEvent } from '@services/inventoryService';
 import type { InventoryProduct, InventoryTrackEvent } from '@/types/inventory';
 import { create } from 'zustand';
+
+export type InventoryListPrefs = {
+  sortBy: InventorySortKey;
+  statusFilter: InventoryStatusFilter;
+  featuredOnly: boolean;
+  recentlyAddedOnly: boolean;
+};
 
 type InventoryStoreState = {
   products: InventoryProduct[];
   isLoading: boolean;
   selectedCategory: string;
+  listPrefs: InventoryListPrefs;
   setProducts: (products: InventoryProduct[]) => void;
+  setListPrefs: (prefs: Partial<InventoryListPrefs>) => void;
   addProduct: (product: InventoryProduct) => void;
   removeProduct: (id: string) => void;
   updateProduct: (id: string, data: Partial<InventoryProduct>) => void;
@@ -41,12 +51,25 @@ const fireTrack = (id: string, event: InventoryTrackEvent): void => {
   trackEvent(id, event);
 };
 
+const defaultListPrefs: InventoryListPrefs = {
+  sortBy: 'recent',
+  statusFilter: 'all',
+  featuredOnly: false,
+  recentlyAddedOnly: false,
+};
+
 export const useInventoryStore = create<InventoryStoreState>((set) => ({
   products: [],
   isLoading: false,
   selectedCategory: 'All',
+  listPrefs: defaultListPrefs,
 
   setProducts: (products) => set({ products }),
+
+  setListPrefs: (prefs) =>
+    set((state) => ({
+      listPrefs: { ...state.listPrefs, ...prefs },
+    })),
 
   addProduct: (product) =>
     set((state) => ({
@@ -99,7 +122,13 @@ export const useInventoryStore = create<InventoryStoreState>((set) => ({
 
   clearProducts: () => set({ products: [], isLoading: false }),
 
-  reset: () => set({ products: [], isLoading: false, selectedCategory: 'All' }),
+  reset: () =>
+    set({
+      products: [],
+      isLoading: false,
+      selectedCategory: 'All',
+      listPrefs: defaultListPrefs,
+    }),
 }));
 
 export function getTotalViews(products: InventoryProduct[]): number {

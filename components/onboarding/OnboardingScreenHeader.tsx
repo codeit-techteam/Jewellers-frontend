@@ -20,7 +20,8 @@ export function OnboardingScreenHeader({ title, onBack }: OnboardingScreenHeader
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/(onboarding)/step5-subscription');
+      // SUBSCRIPTION DISABLED - fallback to products step instead of subscription
+      router.replace('/(onboarding)/step5-products');
     }
   };
 

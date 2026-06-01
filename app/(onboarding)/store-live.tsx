@@ -18,7 +18,7 @@ export default function StoreLiveScreen() {
   const heroHeight = height * 0.4;
 
   const handleContinue = () => {
-    router.replace('/(onboarding)/post-approval-subscription');
+    router.replace('/(app)');
   };
 
   return (
@@ -89,10 +89,10 @@ export default function StoreLiveScreen() {
         className="items-center justify-center rounded-xl py-4"
         style={{ backgroundColor: colors.NAVY }}
         accessibilityRole="button"
-        accessibilityLabel="Choose Your Plan"
+        accessibilityLabel="View Store"
       >
         <Text className="font-semibold" style={{ fontSize: button, color: colors.WHITE }}>
-          Choose Your Plan →
+          View Store →
         </Text>
       </Pressable>
     </View>

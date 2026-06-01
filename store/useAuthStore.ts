@@ -125,7 +125,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           currentOnboardingStep: onboardingStep,
           isOnboardingComplete,
           storeStatus: storeStatus ?? undefined,
-          needsSubscription: needsSubscription ?? undefined,
+          // SUBSCRIPTION DISABLED - enable in future
+          // needsSubscription: needsSubscription ?? undefined,
           phone: user.phone ?? phoneNumber ?? undefined,
         }),
         setWelcomeSeen(),

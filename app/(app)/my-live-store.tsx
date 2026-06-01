@@ -70,17 +70,19 @@ export default function MyLiveStoreScreen() {
       ? `${store.openingTime} – ${store.closingTime}`
       : '';
   const productCount = activeProducts.length;
-  const planLabel = store?.planName ?? 'Free Plan';
+  // SUBSCRIPTION DISABLED - enable in future
+  // const planLabel = store?.planName ?? 'Free Plan';
+  // const planTierLabel = planLabel.toUpperCase();
+  // const planSubtitle = memberSinceYear ? `${planLabel} · ${memberSinceYear}` : planLabel;
   const isLive = store?.storeStatus === 'approved';
   const isVerified = store?.storeStatus === 'approved';
-  const planTierLabel = planLabel.toUpperCase();
-  const memberSinceYear = (() => {
-    const raw = store?.memberSince;
-    if (!raw) return null;
-    const d = dayjs(raw);
-    return d.isValid() ? d.format('YYYY') : null;
-  })();
-  const planSubtitle = memberSinceYear ? `${planLabel} · ${memberSinceYear}` : planLabel;
+  // SUBSCRIPTION DISABLED - enable in future
+  // const memberSinceYear = (() => {
+  //   const raw = store?.memberSince;
+  //   if (!raw) return null;
+  //   const d = dayjs(raw);
+  //   return d.isValid() ? d.format('YYYY') : null;
+  // })();
 
   const handleManageAction = (action: (typeof MANAGE_STORE_ACTIONS)[number]) => {
     if (action.comingSoon) {
@@ -284,6 +286,7 @@ export default function MyLiveStoreScreen() {
           )}
         </View>
 
+        {/* SUBSCRIPTION DISABLED - enable in future
         <View className="mt-4 flex-row items-center justify-between">
           <View>
             <Text
@@ -294,6 +297,28 @@ export default function MyLiveStoreScreen() {
             </Text>
             <Text style={{ fontSize: label, color: colors.BODY_TEXT }}>{planSubtitle}</Text>
           </View>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/storefront',
+                params: {
+                  returnTo:
+                    returnTo === RETURN_TO_PROFILE
+                      ? RETURN_TO_MY_LIVE_STORE_FROM_PROFILE
+                      : RETURN_TO_MY_LIVE_STORE,
+                },
+              })
+            }
+            className="rounded-full border px-4 py-2"
+            style={{ borderColor: colors.NAVY }}
+          >
+            <Text className="font-semibold" style={{ fontSize: label, color: colors.NAVY }}>
+              Visit Storefront
+            </Text>
+          </Pressable>
+        </View>
+        */}
+        <View className="mt-4 flex-row justify-end">
           <Pressable
             onPress={() =>
               router.push({

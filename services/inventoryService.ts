@@ -75,6 +75,9 @@ type BackendProduct = {
   price_breakup?: BackendPriceBreakup | null;
   collection_name?: string | null;
   video_url?: string | null;
+  status?: string;
+  is_trending?: boolean;
+  trending?: boolean;
 };
 
 function mapAnalytics(
@@ -153,6 +156,8 @@ function mapProduct(bp: BackendProduct): InventoryProduct {
     imageUris: imageUrls.length > 0 ? imageUrls : undefined,
     analytics: mapAnalytics(bp.product_analytics),
     isDraft: bp.is_draft ?? false,
+    status: bp.status ?? (bp.is_draft ? 'draft' : 'active'),
+    isTrending: bp.is_trending === true || bp.trending === true,
     createdAt: bp.created_at ?? new Date().toISOString(),
     additionalDetails: desc,
     description: desc,

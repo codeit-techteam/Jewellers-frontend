@@ -85,14 +85,14 @@ export default function SalesReportScreen() {
     queryFn: () => getOverview(currentRange),
   });
 
-  // Product analytics — all-time, sorted by views desc
+  // Product analytics for selected period, sorted by views desc
   const {
     data: productRows = [],
     isLoading: productsLoading,
     refetch: refetchProducts,
   } = useQuery({
-    queryKey: ['analytics', 'products'],
-    queryFn: getProductAnalytics,
+    queryKey: ['analytics', 'products', currentRange],
+    queryFn: () => getProductAnalytics(currentRange),
   });
 
   // Active product count

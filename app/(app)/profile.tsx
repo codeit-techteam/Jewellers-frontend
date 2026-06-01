@@ -104,8 +104,9 @@ export default function ProfileScreen() {
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const logout = useAuthStore((state) => state.logout);
 
-  const planName = profile.plan ?? 'Free Plan';
-  const isPaidPlan = planName.toLowerCase() !== 'free' && planName.toLowerCase() !== 'free plan';
+  // SUBSCRIPTION DISABLED - enable in future
+  // const planName = profile.plan ?? 'Free Plan';
+  // const isPaidPlan = planName.toLowerCase() !== 'free' && planName.toLowerCase() !== 'free plan';
 
   const storeQuery = useQuery({
     queryKey: ['store'],
@@ -383,6 +384,7 @@ export default function ProfileScreen() {
             body={body}
             micro={micro}
           />
+          {/* SUBSCRIPTION DISABLED - enable in future
           <SettingsRow
             icon="card-outline"
             label="Subscription Plan"
@@ -414,6 +416,7 @@ export default function ProfileScreen() {
               </View>
             }
           />
+          */}
           <SettingsRow
             icon="storefront-outline"
             label="My Live Store"

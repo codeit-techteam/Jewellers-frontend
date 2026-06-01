@@ -5,7 +5,7 @@ import { DialogProvider } from '@providers/DialogProvider';
 import { QueryProvider } from '@providers/QueryProvider';
 import { getStatus } from '@services/onboardingService';
 import { onAuthReset } from '@lib/authEvents';
-import { loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
+import { saveOnboardingMeta } from '@lib/onboardingMeta';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { useAppStore } from '@store/useAppStore';
 import { useAuthStore } from '@store/useAuthStore';
@@ -60,16 +60,13 @@ export default function RootLayout() {
     void (async () => {
       // ── Phase 1: instant routing from local state ──────────────────────────
       // checkPersistedAuth already restored isOnboardingComplete / onboardingStep /
-      // storeStatus from SecureStore. Only needsSubscription isn't in the Zustand
-      // store, so we read the full meta once (fast SecureStore read, no network).
+      // storeStatus from SecureStore.
       const { isOnboardingComplete, onboardingStep, storeStatus } = useAuthStore.getState();
-      const localMeta = await loadOnboardingMeta().catch(() => null);
 
       const localRoute = getResumeRoute(
         isOnboardingComplete,
         onboardingStep,
         storeStatus ?? undefined,
-        localMeta?.needsSubscription,
       );
 
       const resolveRoute = (r: ReturnType<typeof getResumeRoute>) =>
@@ -88,7 +85,6 @@ export default function RootLayout() {
           currentOnboardingStep: status.onboardingStep,
           isOnboardingComplete: status.isOnboardingComplete,
           storeStatus: status.storeStatus,
-          needsSubscription: status.needsSubscription,
           phone: useAuthStore.getState().user?.phone,
         });
 
@@ -96,7 +92,6 @@ export default function RootLayout() {
           status.isOnboardingComplete,
           status.onboardingStep,
           status.storeStatus,
-          status.needsSubscription,
         );
 
         const resolvedServer = resolveRoute(serverRoute);

@@ -94,6 +94,13 @@ export default function PostApprovalSubscriptionScreen() {
     }
   };
 
+  // SUBSCRIPTION DISABLED - will be enabled in future
+  // Redirect away immediately if someone lands here
+  useEffect(() => {
+    router.replace('/(app)');
+  }, [router]);
+  return null;
+
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
       <StatusBar style="dark" />

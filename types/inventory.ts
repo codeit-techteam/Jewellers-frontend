@@ -39,6 +39,9 @@ export type InventoryProduct = {
   imageUris?: string[];
   analytics: ProductAnalytics;
   isDraft: boolean;
+  /** active | draft | other lifecycle from API */
+  status?: string;
+  isTrending?: boolean;
   createdAt: string;
   /** Legacy alias — same as description */
   additionalDetails?: string;

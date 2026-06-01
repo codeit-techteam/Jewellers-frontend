@@ -1,7 +1,11 @@
 export type AnalyticsRange = 'today' | 'yesterday' | '7days' | '30days' | 'this_month';
 
 export type AnalyticsOverview = {
+  /** @deprecated Use storeViews + productViews — kept for backwards compatibility */
   views: number;
+  storeViews: number;
+  productViews: number;
+  uniqueVisitors: number;
   wishlist: number;
   inquiry: number;
   waClicks: number;

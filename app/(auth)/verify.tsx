@@ -178,7 +178,6 @@ export default function VerifyScreen() {
         response.isOnboardingComplete,
         response.onboardingStep,
         response.storeStatus ?? undefined,
-        response.needsSubscription,
       );
 
       // Navigate immediately — setAuthSuccess updates in-memory session first.
@@ -188,7 +187,6 @@ export default function VerifyScreen() {
         response.onboardingStep,
         response.isOnboardingComplete,
         response.storeStatus ?? null,
-        response.needsSubscription,
       );
       router.replace(resumeRoute);
     } catch (error) {

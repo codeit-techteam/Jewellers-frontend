@@ -85,6 +85,13 @@ export default function Step6CheckoutScreen() {
     return () => clearTimeout(timer);
   }, [paymentSuccess, router]);
 
+  // SUBSCRIPTION DISABLED - will be enabled in future
+  // Redirect away immediately if someone lands here
+  useEffect(() => {
+    router.replace('/(app)');
+  }, [router]);
+  return null;
+
   if (!step5 || !step5.subscriptionId) {
     return <Redirect href="/(onboarding)/step5-subscription" />;
   }
