@@ -27,11 +27,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -92,6 +94,11 @@ export default function StorefrontScreen() {
     queryKey: ['products', 'storefront-active'],
     queryFn: () => getProducts({ status: 'active', is_draft: false }),
   });
+
+  const { isRefreshing: isStorefrontRefreshing, onRefresh: onStorefrontRefresh } = usePullToRefresh([
+    storeQuery,
+    productsQuery,
+  ]);
 
   const inventoryProducts = productsQuery.data ?? [];
 
@@ -183,6 +190,13 @@ export default function StorefrontScreen() {
         className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isStorefrontRefreshing}
+            onRefresh={onStorefrontRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         {coverUri ? (
           <View className="mx-4 mt-4 overflow-hidden rounded-xl" style={{ height: width * 0.4 }}>

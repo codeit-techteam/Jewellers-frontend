@@ -17,6 +17,7 @@ import { useInventoryStore } from '@store/useInventoryStore';
 import { Ionicons } from '@expo/vector-icons';
 import { CachedImage } from '@components/ui/CachedImage';
 import { DeferredDateTimePicker } from '@components/ui/DeferredDateTimePicker';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { useRouter } from 'expo-router';
@@ -28,6 +29,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -157,6 +159,14 @@ export default function DashboardScreen() {
     void productAnalyticsQuery.refetch();
     void notificationsQuery.refetch();
   };
+
+  const { isRefreshing: isDashboardRefreshing, onRefresh: onDashboardRefresh } = usePullToRefresh([
+    storeQuery,
+    overviewQuery,
+    productsQuery,
+    productAnalyticsQuery,
+    notificationsQuery,
+  ]);
 
   const storeName = store?.businessName ?? 'Your Store';
   const logoUri = store?.logoUrl ?? null;
@@ -290,6 +300,13 @@ export default function DashboardScreen() {
           paddingBottom: insets.bottom + 88,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isDashboardRefreshing}
+            onRefresh={onDashboardRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         <View
           className="mb-4 flex-row items-center justify-between rounded-2xl px-4 py-3"

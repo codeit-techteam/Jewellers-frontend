@@ -12,14 +12,16 @@ import { showShareComingSoonAlert } from '@utils/storeAlerts';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { Ionicons } from '@expo/vector-icons';
+import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { navigateBack } from '@lib/navigateBack';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -57,7 +59,7 @@ export default function ProductDetailScreen() {
   const [selectedMetal, setSelectedMetal] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     if (!productId) return;
     setLoadError(null);
     try {
@@ -66,17 +68,18 @@ export default function ProductDetailScreen() {
     } catch (err) {
       setLoadError(handleApiError(err));
     }
-  };
+  }, [productId]);
+
+  const { isRefreshing: isProductRefreshing, onRefresh: onProductRefresh } =
+    usePullToRefreshCallback(loadProduct);
 
   useEffect(() => {
     if (!productId) {
       navigateBack(router, returnTo);
       return;
     }
-    // Always fetch fresh data to get all enrichment fields
     void loadProduct();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId]);
+  }, [productId, loadProduct, router, returnTo]);
 
   useEffect(() => {
     if (product?.availableSizes?.length) {
@@ -209,6 +212,13 @@ export default function ProductDetailScreen() {
         className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isProductRefreshing}
+            onRefresh={onProductRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         {/* ── SECTION: Image gallery ── */}
         <View style={{ height: width * 0.85 }}>

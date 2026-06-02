@@ -1,5 +1,6 @@
 import { colors } from '@constants/colors';
 import { MIN_PRODUCTS_REQUIRED, REVIEW_TIMELINE_STEPS } from '@constants/products';
+import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { useFontScale } from '@hooks/useFontScale';
 import { saveOnboardingMeta } from '@lib/onboardingMeta';
 import { getStatus, submitForReview } from '@services/onboardingService';
@@ -11,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const POLL_INTERVAL_MS = 15000;
@@ -163,6 +164,40 @@ export default function ReviewPendingScreen() {
     intervalRef.current = setInterval(() => void doPoll(), POLL_INTERVAL_MS);
   }, [stopPolling, fetchRejectionReason, setStoreStatus, completeOnboarding, router]);
 
+  const refreshReviewStatus = useCallback(async () => {
+    try {
+      const response = await getStatus();
+      if (response.storeStatus === 'approved') {
+        stopPolling();
+        setStoreStatus('approved');
+        completeOnboarding();
+        useAuthStore.setState({ isOnboardingComplete: true });
+        await saveOnboardingMeta({
+          currentOnboardingStep: 7,
+          isOnboardingComplete: true,
+          storeStatus: 'approved',
+        });
+        router.replace('/(onboarding)/store-live');
+      } else if (response.storeStatus === 'rejected') {
+        stopPolling();
+        setStoreStatus('rejected');
+        await fetchRejectionReason();
+        setScreenState('rejected');
+      }
+    } catch {
+      // Transient error — user can try again
+    }
+  }, [
+    stopPolling,
+    fetchRejectionReason,
+    setStoreStatus,
+    completeOnboarding,
+    router,
+  ]);
+
+  const { isRefreshing: isReviewRefreshing, onRefresh: onReviewRefresh } =
+    usePullToRefreshCallback(refreshReviewStatus);
+
   useEffect(() => {
     startPolling();
     return stopPolling;
@@ -202,6 +237,13 @@ export default function ReviewPendingScreen() {
           className="flex-1 px-5"
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isReviewRefreshing}
+              onRefresh={onReviewRefresh}
+              tintColor={colors.NAVY}
+            />
+          }
         >
           {/* Red X banner */}
           <View
@@ -304,6 +346,13 @@ export default function ReviewPendingScreen() {
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isReviewRefreshing}
+            onRefresh={onReviewRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         <View
           className="items-center justify-center overflow-hidden rounded-xl"

@@ -10,9 +10,10 @@ import type { AppNotification } from '@/types/notifications';
 import { handleApiError } from '@utils/handleApiError';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { Ionicons } from '@expo/vector-icons';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { dialog } from '@utils/dialog';
 import { useRouter } from 'expo-router';
@@ -134,10 +135,14 @@ export default function NotificationsScreen() {
 
   const apiType = filterTypeForPill(activeFilter);
 
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const notificationsQuery = useQuery({
     queryKey: ['notifications', activeFilter],
     queryFn: () => getNotifications(apiType),
   });
+
+  const { data, isPending, isError, error, refetch } = notificationsQuery;
+  const { isRefreshing: isNotificationsRefreshing, onRefresh: onNotificationsRefresh } =
+    usePullToRefresh([notificationsQuery]);
 
   const notifications = data?.notifications ?? [];
   const filteredNotifications =
@@ -302,22 +307,28 @@ export default function NotificationsScreen() {
         />
       ) : (
       <View style={{ flex: 1 }}>
-        {filteredNotifications.length === 0 ? (
-          <View className="items-center py-16">
-            <Ionicons name="notifications-off-outline" size={48} color={colors.BODY_TEXT} />
-            <Text className="mt-3" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-              No notifications here
-            </Text>
-          </View>
-        ) : (
-          <FlashList
-            data={filteredNotifications}
-            keyExtractor={(item) => item.id}
-            renderItem={renderNotificationItem}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+        <FlashList
+          data={filteredNotifications}
+          keyExtractor={(item) => item.id}
+          renderItem={renderNotificationItem}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View className="items-center py-16">
+              <Ionicons name="notifications-off-outline" size={48} color={colors.BODY_TEXT} />
+              <Text className="mt-3" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+                No notifications here
+              </Text>
+            </View>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isNotificationsRefreshing}
+              onRefresh={onNotificationsRefresh}
+              tintColor={colors.NAVY}
+            />
+          }
+        />
       </View>
       )}
     </View>

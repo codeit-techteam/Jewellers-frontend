@@ -9,6 +9,7 @@ import {
 } from '@constants/profile';
 import { getStore, updateCover, updateLogo } from '@services/storeService';
 import type { BusinessDocument } from '@/types/profile';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
@@ -27,6 +28,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -112,6 +114,8 @@ export default function ProfileScreen() {
     queryKey: ['store'],
     queryFn: getStore,
   });
+
+  const { isRefreshing: isProfileRefreshing, onRefresh: onProfileRefresh } = usePullToRefresh([storeQuery]);
 
   useEffect(() => {
     if (storeQuery.data) {
@@ -264,6 +268,13 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isProfileRefreshing}
+            onRefresh={onProfileRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         <Pressable onPress={() => void handleCoverPick()} className="relative overflow-hidden">
           {profile.coverUri ? (

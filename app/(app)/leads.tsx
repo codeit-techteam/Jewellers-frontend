@@ -2,6 +2,7 @@ import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { CachedImage } from '@components/ui/CachedImage';
 import { LazyLeadDetailModal } from '@components/ui/LazyLeadDetailModal';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useLeadsQuery } from '@hooks/useLeadsQuery';
 import { updateLeadStatusApi } from '@services/leadsService';
 import {
@@ -18,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { StatusBar } from 'expo-status-bar';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { APP_BRAND_NAME, LEAD_FILTER_OPTIONS } from '@constants/leads';
 import { colors } from '@constants/colors';
@@ -177,12 +178,9 @@ export default function LeadsScreen() {
   const setSearchQuery = useLeadsStore((state) => state.setSearchQuery);
   const updateLeadStatus = useLeadsStore((state) => state.updateLeadStatus);
 
-  const {
-    isPending,
-    isError,
-    error,
-    refetch,
-  } = useLeadsQuery();
+  const leadsQuery = useLeadsQuery();
+  const { isPending, isError, error, refetch } = leadsQuery;
+  const { isRefreshing: isLeadsRefreshing, onRefresh: onLeadsRefresh } = usePullToRefresh([leadsQuery]);
 
   const filteredLeads = useMemo(
     () => getFilteredLeads(leads, activeFilter, searchQuery),
@@ -228,15 +226,35 @@ export default function LeadsScreen() {
     [body, label, micro, confirmMarkVisited],
   );
 
-  const listFooter = useMemo(
-    () =>
-      filteredLeads.length > 0 ? (
-        <Text className="mt-2 mb-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-          Showing {filteredLeads.length} of {leads.length} leads
-        </Text>
-      ) : null,
-    [filteredLeads.length, leads.length, micro],
-  );
+  const listEmpty = useMemo(() => {
+    if (leads.length === 0) {
+      return (
+        <View className="items-center py-16 px-4">
+          <Ionicons name="calendar-outline" size={64} color="#9ca3af" />
+          <Text className="mt-4 font-bold text-center" style={{ fontSize: body, color: colors.NAVY }}>
+            No appointments yet
+          </Text>
+          <Text className="mt-2 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+            When customers book appointments at your store, they will appear here
+          </Text>
+        </View>
+      );
+    }
+    if (filteredLeads.length === 0) {
+      return (
+        <View className="items-center py-12">
+          <Ionicons name="people-outline" size={48} color={colors.BORDER} />
+          <Text className="mt-3 font-semibold" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+            No leads found
+          </Text>
+          <Text className="mt-1 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
+            {searchQuery ? 'Try a different search term' : 'Try a different filter'}
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  }, [body, filteredLeads.length, label, leads.length, searchQuery]);
 
   if (isPending && leads.length === 0) {
     return <LoadingScreen message="Loading leads…" />;
@@ -336,36 +354,28 @@ export default function LeadsScreen() {
       </View>
 
       <View className="flex-1 px-5">
-        {leads.length === 0 ? (
-          <View className="items-center py-16 px-4">
-            <Ionicons name="calendar-outline" size={64} color="#9ca3af" />
-            <Text className="mt-4 font-bold text-center" style={{ fontSize: body, color: colors.NAVY }}>
-              No appointments yet
-            </Text>
-            <Text className="mt-2 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
-              When customers book appointments at your store, they will appear here
-            </Text>
-          </View>
-        ) : filteredLeads.length === 0 ? (
-          <View className="items-center py-12">
-            <Ionicons name="people-outline" size={48} color={colors.BORDER} />
-            <Text className="mt-3 font-semibold" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-              No leads found
-            </Text>
-            <Text className="mt-1 text-center" style={{ fontSize: label, color: colors.BODY_TEXT }}>
-              {searchQuery ? 'Try a different search term' : 'Try a different filter'}
-            </Text>
-          </View>
-        ) : (
-          <FlashList
-            data={filteredLeads}
-            keyExtractor={(item) => item.id}
-            renderItem={renderLeadItem}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-            ListFooterComponent={listFooter}
-          />
-        )}
+        <FlashList
+          data={filteredLeads}
+          keyExtractor={(item) => item.id}
+          renderItem={renderLeadItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+          ListEmptyComponent={listEmpty}
+          ListFooterComponent={
+            filteredLeads.length > 0 ? (
+              <Text className="mt-2 mb-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+                Showing {filteredLeads.length} of {leads.length} leads
+              </Text>
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isLeadsRefreshing}
+              onRefresh={onLeadsRefresh}
+              tintColor={colors.NAVY}
+            />
+          }
+        />
       </View>
     </View>
   );

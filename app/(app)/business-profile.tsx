@@ -8,13 +8,14 @@ import { businessProfileSchema, type BusinessProfileFormValues } from '@utils/bu
 import { handleApiError } from '@utils/handleApiError';
 import { api } from '@services/api';
 import { Ionicons } from '@expo/vector-icons';
+import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { navigateBack } from '@lib/navigateBack';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
@@ -22,6 +23,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -104,9 +106,11 @@ export default function BusinessProfileScreen() {
     },
   });
 
-  useEffect(() => {
-    void (async () => {
-      setIsLoading(true);
+  const loadStoreProfile = useCallback(
+    async (options?: { showFullScreenLoader?: boolean }) => {
+      if (options?.showFullScreenLoader !== false) {
+        setIsLoading(true);
+      }
       try {
         const store = await getStore();
         applyStoreProfile(store);
@@ -129,11 +133,20 @@ export default function BusinessProfileScreen() {
       } catch (err) {
         setLoadError(handleApiError(err));
       } finally {
-        setIsLoading(false);
+        if (options?.showFullScreenLoader !== false) {
+          setIsLoading(false);
+        }
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    },
+    [applyStoreProfile, profile.taxId, reset],
+  );
+
+  const { isRefreshing: isBusinessProfileRefreshing, onRefresh: onBusinessProfileRefresh } =
+    usePullToRefreshCallback(() => loadStoreProfile({ showFullScreenLoader: false }));
+
+  useEffect(() => {
+    void loadStoreProfile({ showFullScreenLoader: true });
+  }, [loadStoreProfile]);
 
   const handleUseCurrentLocation = async () => {
     setIsFetchingLocation(true);
@@ -264,6 +277,13 @@ export default function BusinessProfileScreen() {
           contentContainerStyle={{ paddingBottom: 140 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isBusinessProfileRefreshing}
+              onRefresh={onBusinessProfileRefresh}
+              tintColor={colors.NAVY}
+            />
+          }
         >
           {/* ── Logo ── */}
           <View className="items-center py-4">

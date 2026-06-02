@@ -14,11 +14,12 @@ import { handleApiError } from '@utils/handleApiError';
 import { showComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { dialog } from '@utils/dialog';
 import Animated, {
   useAnimatedStyle,
@@ -205,21 +206,31 @@ export default function BusinessDocumentsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadDocuments = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const docs = await getDocuments();
-      setDocuments(docs);
-    } catch (err) {
-      setLoadError(handleApiError(err));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [setDocuments]);
+  const loadDocuments = useCallback(
+    async (options?: { showFullScreenLoader?: boolean }) => {
+      if (options?.showFullScreenLoader !== false) {
+        setIsLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const docs = await getDocuments();
+        setDocuments(docs);
+      } catch (err) {
+        setLoadError(handleApiError(err));
+      } finally {
+        if (options?.showFullScreenLoader !== false) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [setDocuments],
+  );
+
+  const { isRefreshing: isDocumentsRefreshing, onRefresh: onDocumentsRefresh } =
+    usePullToRefreshCallback(() => loadDocuments({ showFullScreenLoader: false }));
 
   useEffect(() => {
-    void loadDocuments();
+    void loadDocuments({ showFullScreenLoader: true });
   }, [loadDocuments]);
 
   const highlightType =
@@ -246,7 +257,7 @@ export default function BusinessDocumentsScreen() {
     }
     try {
       await replaceDocument(doc.id, uri);
-      await loadDocuments();
+      await loadDocuments({ showFullScreenLoader: false });
     } catch (err) {
       void dialog.alert('Upload failed', handleApiError(err));
     }
@@ -264,7 +275,7 @@ export default function BusinessDocumentsScreen() {
             }
             try {
               await uploadDocument(item.type, uri);
-              await loadDocuments();
+              await loadDocuments({ showFullScreenLoader: false });
             } catch (err) {
               void dialog.alert('Upload failed', handleApiError(err));
             }
@@ -310,6 +321,13 @@ export default function BusinessDocumentsScreen() {
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isDocumentsRefreshing}
+            onRefresh={onDocumentsRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
           Manage Certificates

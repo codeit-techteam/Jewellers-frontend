@@ -16,12 +16,14 @@ import {
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   Image,
   ImageBackground,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -45,20 +47,31 @@ export default function MyLiveStoreScreen() {
   const micro = width * 0.028;
   const button = width * 0.042;
 
-  const { data: store, isLoading: storeLoading } = useQuery({
+  const storeQuery = useQuery({
     queryKey: ['store'],
     queryFn: getStore,
   });
 
-  const { data: overview } = useQuery({
+  const overviewQuery = useQuery({
     queryKey: ['analytics', 'today'],
     queryFn: () => getOverview('today'),
   });
 
-  const { data: activeProducts = [] } = useQuery({
+  const activeProductsQuery = useQuery({
     queryKey: ['products', 'active'],
     queryFn: () => getProducts({ status: 'active', is_draft: false }),
   });
+
+  const store = storeQuery.data;
+  const overview = overviewQuery.data;
+  const activeProducts = activeProductsQuery.data ?? [];
+  const storeLoading = storeQuery.isPending;
+
+  const { isRefreshing: isLiveStoreRefreshing, onRefresh: onLiveStoreRefresh } = usePullToRefresh([
+    storeQuery,
+    overviewQuery,
+    activeProductsQuery,
+  ]);
 
   const storeName = store?.businessName ?? 'Your Store';
   const logoUri = store?.logoUrl ?? null;
@@ -145,6 +158,13 @@ export default function MyLiveStoreScreen() {
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: 16 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLiveStoreRefreshing}
+            onRefresh={onLiveStoreRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         <View className="mt-3 overflow-hidden rounded-xl" style={{ height: width * 0.52 }}>
           {coverImageUri ? (

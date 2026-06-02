@@ -18,6 +18,7 @@ import { applyInventoryListFilters } from '@utils/inventorySortFilter';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -227,13 +228,7 @@ export default function InventoryScreen() {
     [categories],
   );
 
-  const {
-    isPending,
-    isError,
-    error,
-    refetch,
-    isRefetching,
-  } = useQuery({
+  const productsQuery = useQuery({
     queryKey: inventoryQueryKeys.all,
     queryFn: async () => {
       const data = await getProducts();
@@ -241,6 +236,16 @@ export default function InventoryScreen() {
       return data;
     },
   });
+
+  const {
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = productsQuery;
+
+  const { isRefreshing: isInventoryRefreshing, onRefresh: onInventoryRefresh } =
+    usePullToRefresh([productsQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -478,8 +483,8 @@ export default function InventoryScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching && !isPending}
-              onRefresh={() => void refetch()}
+              refreshing={isInventoryRefreshing}
+              onRefresh={onInventoryRefresh}
               tintColor={colors.NAVY}
             />
           }

@@ -2,6 +2,7 @@ import { CachedImage } from '@components/ui/CachedImage';
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
 import { colors } from '@constants/colors';
 import { MIN_PRODUCTS_REQUIRED, PRODUCT_UPLOAD_BENEFITS } from '@constants/products';
+import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { useFontScale } from '@hooks/useFontScale';
 import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
@@ -18,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Step5ProductsScreen() {
@@ -52,25 +53,30 @@ export default function Step5ProductsScreen() {
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const fetchProducts = useCallback(async () => {
-    setIsLoadingProducts(true);
+  const fetchProducts = useCallback(async (options?: { showFullScreenLoader?: boolean }) => {
+    if (options?.showFullScreenLoader !== false) {
+      setIsLoadingProducts(true);
+    }
     setApiError(null);
     try {
-      // Fetch all products (active + draft) — during onboarding products are
-      // saved as drafts and become active only after boutique approval.
       const fetched = await getProducts();
       setProducts(fetched);
     } catch (err) {
       setApiError(handleApiError(err));
     } finally {
-      setIsLoadingProducts(false);
+      if (options?.showFullScreenLoader !== false) {
+        setIsLoadingProducts(false);
+      }
     }
   }, []);
+
+  const { isRefreshing: isProductsRefreshing, onRefresh: onProductsRefresh } =
+    usePullToRefreshCallback(() => fetchProducts({ showFullScreenLoader: false }));
 
   // Re-fetch every time this screen comes into focus (i.e. after returning from add/edit)
   useFocusEffect(
     useCallback(() => {
-      void fetchProducts();
+      void fetchProducts({ showFullScreenLoader: true });
     }, [fetchProducts]),
   );
 
@@ -157,6 +163,13 @@ export default function Step5ProductsScreen() {
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: 130 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isProductsRefreshing}
+            onRefresh={onProductsRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         {/* ── Title ── */}
         <Text className="font-bold" style={{ fontSize: h1, color: colors.NAVY }}>

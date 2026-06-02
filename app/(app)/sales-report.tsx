@@ -5,6 +5,7 @@ import type { AnalyticsRange } from '@/types/analytics';
 import { formatInr } from '@utils/formatCurrency';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -75,39 +76,33 @@ export default function SalesReportScreen() {
   const currentRange = PERIODS[selectedPeriodIdx].range;
 
   // Period-scoped overview (re-fetches when period changes)
-  const {
-    data: overview,
-    isLoading: overviewLoading,
-    isError: overviewError,
-    refetch: refetchOverview,
-  } = useQuery({
+  const overviewQuery = useQuery({
     queryKey: ['analytics', 'overview', currentRange],
     queryFn: () => getOverview(currentRange),
   });
 
-  // Product analytics for selected period, sorted by views desc
-  const {
-    data: productRows = [],
-    isLoading: productsLoading,
-    refetch: refetchProducts,
-  } = useQuery({
+  const productAnalyticsQuery = useQuery({
     queryKey: ['analytics', 'products', currentRange],
     queryFn: () => getProductAnalytics(currentRange),
   });
 
-  // Active product count
-  const { data: activeProducts = [], refetch: refetchActive } = useQuery({
+  const activeProductsQuery = useQuery({
     queryKey: ['products', 'active', 'analytics'],
     queryFn: () => getProducts({ status: 'active', is_draft: false }),
   });
 
-  const isRefreshing = overviewLoading || productsLoading;
+  const overview = overviewQuery.data;
+  const overviewLoading = overviewQuery.isPending || overviewQuery.isFetching;
+  const overviewError = overviewQuery.isError;
+  const productRows = productAnalyticsQuery.data ?? [];
+  const productsLoading = productAnalyticsQuery.isPending || productAnalyticsQuery.isFetching;
+  const activeProducts = activeProductsQuery.data ?? [];
 
-  const handleRefresh = () => {
-    void refetchOverview();
-    void refetchProducts();
-    void refetchActive();
-  };
+  const { isRefreshing, onRefresh } = usePullToRefresh([
+    overviewQuery,
+    productAnalyticsQuery,
+    activeProductsQuery,
+  ]);
 
   const topProducts = productRows.slice(0, 8);
 
@@ -179,11 +174,7 @@ export default function SalesReportScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.NAVY}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.NAVY} />
         }
       >
         {/* ── Overview metrics ── */}

@@ -12,11 +12,12 @@ import {
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
+import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function isTrackableProductId(id: string): boolean {
@@ -44,6 +45,9 @@ export default function AllProductsScreen() {
       return data;
     },
   });
+
+  const { isRefreshing: isAllProductsRefreshing, onRefresh: onAllProductsRefresh } =
+    usePullToRefresh([productsQuery]);
 
   const displayProducts = useMemo(
     () => buildStorefrontInventoryProducts(productsQuery.data ?? []),
@@ -104,6 +108,13 @@ export default function AllProductsScreen() {
         className="flex-1 px-4 pt-4"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isAllProductsRefreshing}
+            onRefresh={onAllProductsRefresh}
+            tintColor={colors.NAVY}
+          />
+        }
       >
         {displayProducts.length === 0 ? (
           <View className="items-center py-16">
