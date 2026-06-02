@@ -423,8 +423,21 @@ export async function removeProductApi(id: string): Promise<void> {
 }
 
 // Fire and forget — no await, tracking failures never surface to the user.
-export function trackEvent(productId: string, eventType: InventoryTrackEvent): void {
+export async function trackEvent(
+  productId: string,
+  eventType: InventoryTrackEvent,
+  options?: { source?: 'marketplace' | 'partner_preview' },
+): Promise<void> {
+  const { getVisitorId } = await import('@lib/visitorId');
+  const visitorId = await getVisitorId();
+  const source = options?.source ?? 'partner_preview';
+
   void api
-    .post(`/products/${productId}/track`, { eventType, userId: null })
+    .post(`/products/${productId}/track`, {
+      eventType,
+      userId: null,
+      visitorId,
+      source,
+    })
     .catch(() => undefined);
 }

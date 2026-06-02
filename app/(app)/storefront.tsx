@@ -11,6 +11,7 @@ import {
   type StorefrontCategoryTab,
 } from '@constants/storeApp';
 import { getProducts, trackEvent } from '@services/inventoryService';
+import { recordStoreVisit } from '@services/publicAnalyticsService';
 import { getStore } from '@services/storeService';
 import type { InventoryProduct } from '@/types/inventory';
 import { useProfileStore } from '@store/useProfileStore';
@@ -97,6 +98,12 @@ export default function StorefrontScreen() {
     }
   }, [store, applyStoreProfile]);
 
+  // Partner preview — excluded from jeweller Unique Visitors metrics
+  useEffect(() => {
+    if (!store?.id) return;
+    recordStoreVisit(store.id, { source: 'partner_preview' });
+  }, [store?.id]);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -137,7 +144,7 @@ export default function StorefrontScreen() {
         void dialog.alert('Preview product', 'Add this product to your inventory to view full details.');
         return;
       }
-      trackEvent(product.id, 'view');
+      void trackEvent(product.id, 'view', { source: 'partner_preview' });
       router.push({
         pathname: '/(app)/product-detail',
         params: {

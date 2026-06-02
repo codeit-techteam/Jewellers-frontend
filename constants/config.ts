@@ -30,9 +30,19 @@ function resolveApiUrl(): string {
   return 'https://api.jewellars.com/api/jeweller';
 }
 
+/** Public analytics API (customer / marketplace) — same host, no jeweller prefix. */
+function resolvePublicAnalyticsUrl(): string {
+  if (process.env.EXPO_PUBLIC_ANALYTICS_API_URL) {
+    return process.env.EXPO_PUBLIC_ANALYTICS_API_URL;
+  }
+  const jewellerUrl = resolveApiUrl();
+  return jewellerUrl.replace(/\/api\/jeweller\/?$/, '/api/analytics');
+}
+
 export const config = {
   appName: 'Jewellars Partner',
   apiUrl: resolveApiUrl(),
+  publicAnalyticsUrl: resolvePublicAnalyticsUrl(),
   appEnv: (process.env.EXPO_PUBLIC_APP_ENV ?? 'development') as 'development' | 'production',
   isDev: process.env.EXPO_PUBLIC_APP_ENV !== 'production',
 } as const;
