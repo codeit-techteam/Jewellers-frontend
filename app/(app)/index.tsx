@@ -15,8 +15,9 @@ import { handleApiError } from '@utils/handleApiError';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { useInventoryStore } from '@store/useInventoryStore';
 import { Ionicons } from '@expo/vector-icons';
+import { CachedImage } from '@components/ui/CachedImage';
+import { DeferredDateTimePicker } from '@components/ui/DeferredDateTimePicker';
 import { useQuery } from '@tanstack/react-query';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { useRouter } from 'expo-router';
 import { RETURN_TO_HOME } from '@lib/navigateBack';
@@ -24,7 +25,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -114,21 +114,28 @@ export default function DashboardScreen() {
   const overviewQuery = useQuery({
     queryKey: ['analytics', 'overview', apiRange],
     queryFn: () => getOverview(apiRange),
+    enabled: isOnboardingComplete,
   });
+
+  const coreDashboardReady =
+    isOnboardingComplete && !!storeQuery.data && !!overviewQuery.data;
 
   const productsQuery = useQuery({
     queryKey: ['products', 'catalogue'],
     queryFn: () => getProducts(),
+    enabled: coreDashboardReady,
   });
 
   const productAnalyticsQuery = useQuery({
     queryKey: ['analytics', 'products', apiRange],
     queryFn: () => getProductAnalytics(apiRange),
+    enabled: coreDashboardReady,
   });
 
   const notificationsQuery = useQuery({
     queryKey: ['notifications'],
     queryFn: () => getNotifications(),
+    enabled: coreDashboardReady,
   });
 
   const store = storeQuery.data;
@@ -299,7 +306,7 @@ export default function DashboardScreen() {
               }}
             >
               {logoUri ? (
-                <Image source={{ uri: logoUri }} style={{ width: 44, height: 44 }} resizeMode="cover" />
+                <CachedImage source={{ uri: logoUri }} style={{ width: 44, height: 44 }} resizeMode="cover" />
               ) : (
                 <DiamondIcon size={20} containerSize={40} containerColor={colors.NAVY} color={colors.GOLD} />
               )}
@@ -566,7 +573,7 @@ export default function DashboardScreen() {
       </Modal>
 
       {pickerTarget ? (
-        <DateTimePicker
+        <DeferredDateTimePicker
           value={pickerTarget === 'from' ? customFrom : customTo}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}

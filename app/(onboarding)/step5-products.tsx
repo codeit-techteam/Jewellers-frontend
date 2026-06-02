@@ -1,3 +1,4 @@
+import { CachedImage } from '@components/ui/CachedImage';
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
 import { colors } from '@constants/colors';
 import { MIN_PRODUCTS_REQUIRED, PRODUCT_UPLOAD_BENEFITS } from '@constants/products';
@@ -17,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, BackHandler, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Step5ProductsScreen() {
@@ -263,7 +264,7 @@ export default function Step5ProductsScreen() {
               >
                 {/* Thumbnail */}
                 {product.imageUri ? (
-                  <Image
+                  <CachedImage
                     source={{ uri: product.imageUri }}
                     style={{ width: 76, height: 76, borderRadius: 10 }}
                     resizeMode="cover"

@@ -11,8 +11,9 @@ import { handleApiError } from '@utils/handleApiError';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { dialog } from '@utils/dialog';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -39,7 +40,7 @@ type NotificationRowProps = {
   swipeableRef: (ref: Swipeable | null) => void;
 };
 
-function NotificationRow({
+const NotificationRow = memo(function NotificationRow({
   item,
   body,
   label,
@@ -113,7 +114,7 @@ function NotificationRow({
       </Pressable>
     </Swipeable>
   );
-}
+});
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -191,6 +192,28 @@ export default function NotificationsScreen() {
       }
     });
   };
+
+  const renderNotificationItem = useCallback(
+    ({ item }: { item: AppNotification }) => (
+      <NotificationRow
+        item={item}
+        body={body}
+        label={label}
+        micro={micro}
+        onPress={() => handleNotificationPress(item)}
+        onDelete={() => deleteNotification(item.id)}
+        onSwipeOpen={() => closeOtherSwipeables(item.id)}
+        swipeableRef={(ref) => {
+          if (ref) {
+            swipeableRefs.current.set(item.id, ref);
+          } else {
+            swipeableRefs.current.delete(item.id);
+          }
+        }}
+      />
+    ),
+    [body, label, micro],
+  );
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
@@ -278,11 +301,7 @@ export default function NotificationsScreen() {
           onRetry={() => void refetch()}
         />
       ) : (
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={{ flex: 1 }}>
         {filteredNotifications.length === 0 ? (
           <View className="items-center py-16">
             <Ionicons name="notifications-off-outline" size={48} color={colors.BODY_TEXT} />
@@ -291,27 +310,15 @@ export default function NotificationsScreen() {
             </Text>
           </View>
         ) : (
-          filteredNotifications.map((item) => (
-            <NotificationRow
-              key={item.id}
-              item={item}
-              body={body}
-              label={label}
-              micro={micro}
-              onPress={() => handleNotificationPress(item)}
-              onDelete={() => deleteNotification(item.id)}
-              onSwipeOpen={() => closeOtherSwipeables(item.id)}
-              swipeableRef={(ref) => {
-                if (ref) {
-                  swipeableRefs.current.set(item.id, ref);
-                } else {
-                  swipeableRefs.current.delete(item.id);
-                }
-              }}
-            />
-          ))
+          <FlashList
+            data={filteredNotifications}
+            keyExtractor={(item) => item.id}
+            renderItem={renderNotificationItem}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
+            showsVerticalScrollIndicator={false}
+          />
         )}
-      </ScrollView>
+      </View>
       )}
     </View>
   );

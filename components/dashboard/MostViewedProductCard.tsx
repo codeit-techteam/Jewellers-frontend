@@ -1,7 +1,9 @@
+import { CachedImage } from '@components/ui/CachedImage';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import type { InventoryProduct } from '@/types/inventory';
-import { Image, Pressable, Text, View } from 'react-native';
+import { memo } from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 type MostViewedProductCardProps = {
   product: InventoryProduct;
@@ -11,7 +13,7 @@ type MostViewedProductCardProps = {
   onPress: () => void;
 };
 
-export function MostViewedProductCard({
+export const MostViewedProductCard = memo(function MostViewedProductCard({
   product,
   cardWidth,
   body,
@@ -31,7 +33,7 @@ export function MostViewedProductCard({
       }}
     >
       {product.imageUri ? (
-        <Image
+        <CachedImage
           source={{ uri: product.imageUri }}
           style={{ width: cardWidth, height: cardWidth * 0.72 }}
           resizeMode="cover"
@@ -75,4 +77,4 @@ export function MostViewedProductCard({
       </View>
     </Pressable>
   );
-}
+});

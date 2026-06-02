@@ -1,4 +1,4 @@
-import { CountryPicker, CountryPickerTrigger } from '@components/ui/CountryPicker';
+import { CountryPickerTrigger, LazyCountryPicker } from '@components/ui/LazyCountryPicker';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { PrimaryButton } from '@components/ui/PrimaryButton';
 import { DEFAULT_COUNTRY } from '@constants/countries';
@@ -193,7 +193,7 @@ export default function LoginScreen() {
         </View>
       </View>
 
-      <CountryPicker
+      <LazyCountryPicker
         visible={pickerVisible}
         selected={selectedCountry}
         onSelect={setSelectedCountry}

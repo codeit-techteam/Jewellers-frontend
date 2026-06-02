@@ -1,10 +1,9 @@
 import { useRequireOnboardingComplete } from '@hooks/useRequireOnboardingComplete';
+import { useLeadsQuery } from '@hooks/useLeadsQuery';
 import { colors } from '@constants/colors';
-import { getLeads } from '@services/leadsService';
 import { countUpcomingLeads, useLeadsStore } from '@store/useLeadsStore';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { useEffect } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,13 +13,10 @@ export default function AppLayout() {
   const insets = useSafeAreaInsets();
   const iconSize = width * 0.055;
 
-  const storeLeads = useLeadsStore((s) => s.leads);
-  const setLeads = useLeadsStore((s) => s.setLeads);
-  const upcomingCount = countUpcomingLeads(storeLeads);
+  useLeadsQuery();
 
-  useEffect(() => {
-    getLeads().then(setLeads).catch(() => {});
-  }, [setLeads]);
+  const storeLeads = useLeadsStore((s) => s.leads);
+  const upcomingCount = countUpcomingLeads(storeLeads);
 
   // Reserve enough room for tab icons + labels + device home indicator / gesture bar
   const TAB_CONTENT_HEIGHT = 56;

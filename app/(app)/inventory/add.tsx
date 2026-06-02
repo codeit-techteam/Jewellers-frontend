@@ -1,5 +1,5 @@
-import { InventoryProductForm } from '@components/inventory/InventoryProductForm';
-import type { InventoryFormSubmitMode } from '@components/inventory/InventoryProductForm';
+import { LazyInventoryProductForm } from '@components/inventory/LazyInventoryProductForm';
+import type { InventoryFormSubmitMode } from '@components/inventory/LazyInventoryProductForm';
 import { colors } from '@constants/colors';
 import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
 import {
@@ -138,7 +138,7 @@ export default function AddProductScreen() {
         </Text>
       </View>
       <View style={{ flex: 1 }}>
-        <InventoryProductForm
+        <LazyInventoryProductForm
           mode="add"
           initialProduct={isCompleteDraftMode ? draftProduct : undefined}
           isSubmitting={isSubmitting}

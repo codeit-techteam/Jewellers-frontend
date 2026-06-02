@@ -1,6 +1,6 @@
 import { colors } from '@constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps } from 'react';
+import { memo, type ComponentProps } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 type DashboardMetricCardProps = {
@@ -16,7 +16,7 @@ type DashboardMetricCardProps = {
   micro: number;
 };
 
-export function DashboardMetricCard({
+export const DashboardMetricCard = memo(function DashboardMetricCard({
   icon,
   label,
   hint,
@@ -65,4 +65,4 @@ export function DashboardMetricCard({
       )}
     </View>
   );
-}
+});

@@ -1,5 +1,5 @@
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
-import { ExitOnboardingModal } from '@components/ui/ExitOnboardingModal';
+import { LazyExitOnboardingModal } from '@components/ui/LazyExitOnboardingModal';
 import { FormTextField } from '@components/ui/FormTextField';
 import {
   LocationIcon,
@@ -369,7 +369,7 @@ export default function Step1BusinessInfoScreen() {
       </KeyboardAvoidingView>
     </View>
 
-    <ExitOnboardingModal
+    <LazyExitOnboardingModal
       visible={showExitModal}
       onClose={() => setShowExitModal(false)}
       onExit={handleExitConfirm}

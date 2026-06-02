@@ -1,3 +1,5 @@
+import { CachedImage } from '@components/ui/CachedImage';
+import { CachedImageBackground } from '@components/ui/CachedImageBackground';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { StorefrontProductCard } from '@components/storefront/StorefrontProductCard';
 import { colors } from '@constants/colors';
@@ -13,14 +15,12 @@ import {
 import { getProducts, trackEvent } from '@services/inventoryService';
 import { recordStoreVisit } from '@services/publicAnalyticsService';
 import { getStore } from '@services/storeService';
-import type { InventoryProduct } from '@/types/inventory';
 import { useProfileStore } from '@store/useProfileStore';
 import {
   buildStorefrontInventoryProducts,
   type StorefrontDisplayProduct,
 } from '@utils/buildStorefrontInventoryProducts';
 import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
-import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
 import { showShareComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,8 +30,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Image,
-  ImageBackground,
   Linking,
   Pressable,
   ScrollView,
@@ -90,7 +88,16 @@ export default function StorefrontScreen() {
     return `${sorted[0]} – ${sorted[sorted.length - 1]}`;
   })();
 
-  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
+  const productsQuery = useQuery({
+    queryKey: ['products', 'storefront-active'],
+    queryFn: () => getProducts({ status: 'active', is_draft: false }),
+  });
+
+  const inventoryProducts = productsQuery.data ?? [];
+
+  const [selectedCategory, setSelectedCategory] = useState<StorefrontCategoryTab>(
+    STOREFRONT_CATEGORIES[0],
+  );
 
   useEffect(() => {
     if (store) {
@@ -103,22 +110,6 @@ export default function StorefrontScreen() {
     if (!store?.id) return;
     recordStoreVisit(store.id, { source: 'partner_preview' });
   }, [store?.id]);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const products = await getProducts({ status: 'active', is_draft: false });
-        setInventoryProducts(products);
-      } catch (err) {
-        handleApiError(err);
-        setInventoryProducts([]);
-      }
-    })();
-  }, []);
-
-  const [selectedCategory, setSelectedCategory] = useState<StorefrontCategoryTab>(
-    STOREFRONT_CATEGORIES[0],
-  );
 
   const displayProducts = useMemo(
     () => buildStorefrontInventoryProducts(inventoryProducts),
@@ -195,7 +186,7 @@ export default function StorefrontScreen() {
       >
         {coverUri ? (
           <View className="mx-4 mt-4 overflow-hidden rounded-xl" style={{ height: width * 0.4 }}>
-            <ImageBackground
+            <CachedImageBackground
               source={{ uri: coverUri }}
               style={{ width: '100%', height: '100%' }}
               resizeMode="cover"
@@ -219,7 +210,7 @@ export default function StorefrontScreen() {
                 }}
               >
                 {logoUri ? (
-                  <Image
+                  <CachedImage
                     source={{ uri: logoUri }}
                     style={{ width: 80, height: 80 }}
                     resizeMode="cover"

@@ -1,5 +1,5 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
-import { SwitchAccountModal } from '@components/ui/SwitchAccountModal';
+import { LazySwitchAccountModal } from '@components/ui/LazySwitchAccountModal';
 import { getResumeRoute } from '@lib/getResumeRoute';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
@@ -320,7 +320,7 @@ export default function ResumeChoiceScreen() {
         </View>
       </ImageBackground>
 
-      <SwitchAccountModal
+      <LazySwitchAccountModal
         visible={showSwitchModal}
         onClose={() => setShowSwitchModal(false)}
         onConfirm={() => void handleSwitchConfirm()}

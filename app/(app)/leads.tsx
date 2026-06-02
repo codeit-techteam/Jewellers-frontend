@@ -1,10 +1,9 @@
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
-import { LeadDetailModal } from '@components/ui/LeadDetailModal';
-import { LoadingScreen } from '@components/ui/LoadingScreen';
-import { APP_BRAND_NAME, LEAD_FILTER_OPTIONS } from '@constants/leads';
-import { colors } from '@constants/colors';
-import { getLeads, updateLeadStatusApi } from '@services/leadsService';
+import { CachedImage } from '@components/ui/CachedImage';
+import { LazyLeadDetailModal } from '@components/ui/LazyLeadDetailModal';
+import { useLeadsQuery } from '@hooks/useLeadsQuery';
+import { updateLeadStatusApi } from '@services/leadsService';
 import {
   countUpcomingLeads,
   getFilteredLeads,
@@ -16,14 +15,17 @@ import type { Lead } from '@/types/leads';
 import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { FlashList } from '@shopify/flash-list';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { Linking, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { LoadingScreen } from '@components/ui/LoadingScreen';
+import { APP_BRAND_NAME, LEAD_FILTER_OPTIONS } from '@constants/leads';
+import { colors } from '@constants/colors';
 import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function LeadCard({
+const LeadCard = memo(function LeadCard({
   lead,
   body,
   label,
@@ -154,7 +156,7 @@ function LeadCard({
       )}
     </View>
   );
-}
+});
 
 export default function LeadsScreen() {
   const insets = useSafeAreaInsets();
@@ -173,7 +175,6 @@ export default function LeadsScreen() {
   const searchQuery = useLeadsStore((state) => state.searchQuery);
   const setFilter = useLeadsStore((state) => state.setFilter);
   const setSearchQuery = useLeadsStore((state) => state.setSearchQuery);
-  const setLeads = useLeadsStore((state) => state.setLeads);
   const updateLeadStatus = useLeadsStore((state) => state.updateLeadStatus);
 
   const {
@@ -181,14 +182,7 @@ export default function LeadsScreen() {
     isError,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['leads'],
-    queryFn: async () => {
-      const data = await getLeads();
-      setLeads(data);
-      return data;
-    },
-  });
+  } = useLeadsQuery();
 
   const filteredLeads = useMemo(
     () => getFilteredLeads(leads, activeFilter, searchQuery),
@@ -197,7 +191,7 @@ export default function LeadsScreen() {
 
   const upcomingCount = useMemo(() => countUpcomingLeads(leads), [leads]);
 
-  const handleStatusUpdate = (id: string, status: 'visited') => {
+  const handleStatusUpdate = useCallback((id: string, status: 'visited') => {
     void (async () => {
       try {
         await updateLeadStatusApi(id, status);
@@ -207,17 +201,42 @@ export default function LeadsScreen() {
         void dialog.alert('Error', handleApiError(err));
       }
     })();
-  };
+  }, [refetch, updateLeadStatus]);
 
   const openLeadModal = (lead: Lead) => setSelectedLead(lead);
   const closeLeadModal = () => setSelectedLead(null);
 
-  const confirmMarkVisited = (lead: Lead) => {
+  const confirmMarkVisited = useCallback((lead: Lead) => {
     void dialog.confirm('Mark as Visited', `Mark ${lead.name} as Visited?`, {
       confirmText: 'Confirm',
       onConfirm: () => handleStatusUpdate(lead.id, 'visited'),
     });
-  };
+  }, [handleStatusUpdate]);
+
+  const renderLeadItem = useCallback(
+    ({ item: lead }: { item: Lead }) => (
+      <LeadCard
+        lead={lead}
+        body={body}
+        label={label}
+        micro={micro}
+        onContactNow={() => void Linking.openURL(`tel:${normalizePhoneForLink(lead.phone)}`)}
+        onMarkVisited={() => confirmMarkVisited(lead)}
+        onViewDetails={() => openLeadModal(lead)}
+      />
+    ),
+    [body, label, micro, confirmMarkVisited],
+  );
+
+  const listFooter = useMemo(
+    () =>
+      filteredLeads.length > 0 ? (
+        <Text className="mt-2 mb-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
+          Showing {filteredLeads.length} of {leads.length} leads
+        </Text>
+      ) : null,
+    [filteredLeads.length, leads.length, micro],
+  );
 
   if (isPending && leads.length === 0) {
     return <LoadingScreen message="Loading leads…" />;
@@ -229,7 +248,7 @@ export default function LeadsScreen() {
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top + 8 }}>
-      <LeadDetailModal
+      <LazyLeadDetailModal
         lead={selectedLead}
         visible={selectedLead !== null}
         onClose={closeLeadModal}
@@ -243,7 +262,7 @@ export default function LeadsScreen() {
           style={{ width: 32, height: 32, backgroundColor: colors.SURFACE_MUTED }}
         >
           {profile.logoUri ? (
-            <Image source={{ uri: profile.logoUri }} style={{ width: 32, height: 32 }} />
+            <CachedImage source={{ uri: profile.logoUri }} style={{ width: 32, height: 32 }} />
           ) : (
             <DiamondIcon size={14} containerSize={28} containerColor={colors.SURFACE_MUTED} color={colors.GOLD} />
           )}
@@ -316,12 +335,7 @@ export default function LeadsScreen() {
         </Text>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        className="px-5"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-        showsVerticalScrollIndicator={false}
-      >
+      <View className="flex-1 px-5">
         {leads.length === 0 ? (
           <View className="items-center py-16 px-4">
             <Ionicons name="calendar-outline" size={64} color="#9ca3af" />
@@ -343,26 +357,16 @@ export default function LeadsScreen() {
             </Text>
           </View>
         ) : (
-          filteredLeads.map((lead) => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              body={body}
-              label={label}
-              micro={micro}
-              onContactNow={() => void Linking.openURL(`tel:${normalizePhoneForLink(lead.phone)}`)}
-              onMarkVisited={() => confirmMarkVisited(lead)}
-              onViewDetails={() => openLeadModal(lead)}
-            />
-          ))
+          <FlashList
+            data={filteredLeads}
+            keyExtractor={(item) => item.id}
+            renderItem={renderLeadItem}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+            ListFooterComponent={listFooter}
+          />
         )}
-
-        {filteredLeads.length > 0 && (
-          <Text className="mt-2 mb-2 text-center" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-            Showing {filteredLeads.length} of {leads.length} leads
-          </Text>
-        )}
-      </ScrollView>
+      </View>
     </View>
   );
 }

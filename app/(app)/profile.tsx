@@ -1,3 +1,5 @@
+import { CachedImage } from '@components/ui/CachedImage';
+import { CachedImageBackground } from '@components/ui/CachedImageBackground';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import {
@@ -21,8 +23,6 @@ import type { ComponentProps } from 'react';
 import { useEffect } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  ImageBackground,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -267,7 +267,7 @@ export default function ProfileScreen() {
       >
         <Pressable onPress={() => void handleCoverPick()} className="relative overflow-hidden">
           {profile.coverUri ? (
-            <ImageBackground
+            <CachedImageBackground
               source={{ uri: profile.coverUri }}
               style={{ width: '100%', height: width * 0.36 }}
               resizeMode="cover"
@@ -281,7 +281,7 @@ export default function ProfileScreen() {
                   Edit cover
                 </Text>
               </View>
-            </ImageBackground>
+            </CachedImageBackground>
           ) : (
             <View
               className="items-center justify-center"
@@ -314,7 +314,7 @@ export default function ProfileScreen() {
               }}
             >
               {profile.logoUri ? (
-                <Image
+                <CachedImage
                   source={{ uri: profile.logoUri }}
                   style={{ width: 80, height: 80 }}
                   resizeMode="cover"

@@ -1,8 +1,10 @@
+import { CachedImage } from '@components/ui/CachedImage';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import type { StorefrontDisplayProduct } from '@utils/buildStorefrontInventoryProducts';
 import { formatInr } from '@utils/formatCurrency';
-import { Image, Pressable, Text, View } from 'react-native';
+import { memo } from 'react';
+import { Pressable, Text, View } from 'react-native';
 
 type StorefrontProductCardProps = {
   product: StorefrontDisplayProduct;
@@ -12,7 +14,7 @@ type StorefrontProductCardProps = {
   onViewDetails: () => void;
 };
 
-export function StorefrontProductCard({
+export const StorefrontProductCard = memo(function StorefrontProductCard({
   product,
   width,
   nameSize,
@@ -33,7 +35,7 @@ export function StorefrontProductCard({
     >
       <View style={{ height: imageHeight }}>
         {hasImage ? (
-          <Image
+          <CachedImage
             source={{ uri: product.imageUri }}
             style={{ width: '100%', height: imageHeight }}
             resizeMode="cover"
@@ -75,4 +77,4 @@ export function StorefrontProductCard({
       </View>
     </View>
   );
-}
+});

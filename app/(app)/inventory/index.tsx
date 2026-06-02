@@ -1,3 +1,4 @@
+import { CachedImage } from '@components/ui/CachedImage';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
@@ -16,12 +17,12 @@ import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
 import { applyInventoryListFilters } from '@utils/inventorySortFilter';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -34,7 +35,7 @@ import {
 import { dialog } from '@utils/dialog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function ProductCard({
+const ProductCard = memo(function ProductCard({
   product,
   width,
   body,
@@ -66,7 +67,7 @@ function ProductCard({
       <Pressable onPress={onPress}>
       <View className="flex-row">
         {product.imageUri ? (
-          <Image
+          <CachedImage
             source={{ uri: product.imageUri }}
             style={{ width: 80, height: 80, borderRadius: 8 }}
             resizeMode="cover"
@@ -192,7 +193,7 @@ function ProductCard({
       </View>
     </View>
   );
-}
+});
 
 export default function InventoryScreen() {
   const router = useRouter();
@@ -297,6 +298,78 @@ export default function InventoryScreen() {
 
   const listTitle = 'My Products';
 
+  const renderProductItem = useCallback(
+    ({ item: product }: { item: InventoryProduct }) => (
+      <ProductCard
+        product={product}
+        width={width}
+        body={body}
+        label={label}
+        micro={micro}
+        onPress={() =>
+          router.push({
+            pathname: '/(app)/product-detail',
+            params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
+          })
+        }
+        onRemove={() => handleRemove(product)}
+        onEdit={() =>
+          router.push({
+            pathname: '/(app)/inventory/edit',
+            params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
+          })
+        }
+      />
+    ),
+    [body, handleRemove, label, micro, router, width],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <>
+        <Text className="mb-3 font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
+          {listTitle}
+        </Text>
+        {isPending && products.length > 0 ? (
+          <View className="items-center py-4">
+            <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>Refreshing…</Text>
+          </View>
+        ) : null}
+      </>
+    ),
+    [h2, isPending, listTitle, micro, products.length],
+  );
+
+  const listEmpty = useMemo(
+    () => (
+      <View className="items-center py-12">
+        <Ionicons name="diamond-outline" size={48} color={colors.BODY_TEXT} />
+        <Text className="mt-3 text-center" style={{ fontSize: body, color: colors.BODY_TEXT }}>
+          {searchQuery.trim()
+            ? 'No products match your search'
+            : selectedCategory !== 'All'
+              ? 'No products in this category'
+              : 'No products yet — add your first piece'}
+        </Text>
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: '/(app)/inventory/add',
+              params: { returnTo: RETURN_TO_INVENTORY },
+            })
+          }
+          className="mt-4 rounded-full px-4 py-2"
+          style={{ backgroundColor: colors.NAVY }}
+        >
+          <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
+            Add Product
+          </Text>
+        </Pressable>
+      </View>
+    ),
+    [body, label, router, searchQuery, selectedCategory],
+  );
+
   if (isPending && products.length === 0) {
     return <LoadingScreen message="Loading inventory…" />;
   }
@@ -394,79 +467,24 @@ export default function InventoryScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        className="px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching && !isPending}
-            onRefresh={() => void refetch()}
-            tintColor={colors.NAVY}
-          />
-        }
-      >
-        <Text className="mb-3 font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
-          {listTitle}
-        </Text>
-
-        {isPending && products.length > 0 ? (
-          <View className="items-center py-4">
-            <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>Refreshing…</Text>
-          </View>
-        ) : null}
-        {filteredProducts.length === 0 ? (
-          <View className="items-center py-12">
-            <Ionicons name="diamond-outline" size={48} color={colors.BODY_TEXT} />
-            <Text className="mt-3 text-center" style={{ fontSize: body, color: colors.BODY_TEXT }}>
-              {searchQuery.trim()
-                ? 'No products match your search'
-                : selectedCategory !== 'All'
-                  ? 'No products in this category'
-                  : 'No products yet — add your first piece'}
-            </Text>
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/(app)/inventory/add',
-                  params: { returnTo: RETURN_TO_INVENTORY },
-                })
-              }
-              className="mt-4 rounded-full px-4 py-2"
-              style={{ backgroundColor: colors.NAVY }}
-            >
-              <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
-                Add Product
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
-          filteredProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              width={width}
-              body={body}
-              label={label}
-              micro={micro}
-              onPress={() =>
-                router.push({
-                  pathname: '/(app)/product-detail',
-                  params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
-                })
-              }
-              onRemove={() => handleRemove(product)}
-              onEdit={() =>
-                router.push({
-                  pathname: '/(app)/inventory/edit',
-                  params: { productId: product.id, returnTo: RETURN_TO_INVENTORY },
-                })
-              }
+      <View style={{ flex: 1 }}>
+        <FlashList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderProductItem}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={listEmpty}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: insets.bottom + 100 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching && !isPending}
+              onRefresh={() => void refetch()}
+              tintColor={colors.NAVY}
             />
-          ))
-        )}
-      </ScrollView>
+          }
+        />
+      </View>
 
       <Pressable
         onPress={() =>

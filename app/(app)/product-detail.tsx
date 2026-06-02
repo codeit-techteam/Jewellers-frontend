@@ -1,3 +1,4 @@
+import { CachedImage } from '@components/ui/CachedImage';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import { getProduct, removeProductApi } from '@services/inventoryService';
@@ -18,7 +19,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -224,7 +224,7 @@ export default function ProductDetailScreen() {
               style={{ flex: 1 }}
             >
               {images.map((uri, i) => (
-                <Image
+                <CachedImage
                   key={i}
                   source={{ uri }}
                   style={{ width, height: width * 0.85 }}

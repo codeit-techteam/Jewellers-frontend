@@ -1,5 +1,5 @@
-import { InventoryProductForm } from '@components/inventory/InventoryProductForm';
-import type { InventoryFormSubmitMode } from '@components/inventory/InventoryProductForm';
+import { LazyInventoryProductForm } from '@components/inventory/LazyInventoryProductForm';
+import type { InventoryFormSubmitMode } from '@components/inventory/LazyInventoryProductForm';
 import { colors } from '@constants/colors';
 import { saveDraftProduct } from '@services/inventoryService';
 import type { AddProductForm, InventoryProduct } from '@/types/inventory';
@@ -108,7 +108,7 @@ export default function OnboardingAddProductScreen() {
       </View>
 
       <View style={{ flex: 1 }}>
-        <InventoryProductForm
+        <LazyInventoryProductForm
           mode="add"
           isSubmitting={isSubmitting}
           onSubmit={(p, m) => void handleSubmit(p, m)}
