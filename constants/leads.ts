@@ -6,6 +6,7 @@ export const MOCK_LEADS_TOTAL = 12;
 export const LEAD_FILTER_OPTIONS = [
   { label: 'All Leads', value: 'all' as const },
   { label: 'Upcoming', value: 'upcoming' as const },
+  { label: 'Non Visited', value: 'non_visited' as const },
   { label: 'Visited', value: 'visited' as const },
 ];
 

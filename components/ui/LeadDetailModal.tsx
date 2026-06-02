@@ -1,5 +1,5 @@
 import { colors } from '@constants/colors';
-import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
+import { canMarkLeadVisited, getLeadBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
 import type { Lead } from '@/types/leads';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
@@ -55,8 +55,8 @@ export function LeadDetailModal({ lead, visible, onClose, onMarkVisited }: Props
 
   if (!lead) return null;
 
-  const badge = getLeadStatusBadgeStyle(lead.status);
-  const isUpcoming = lead.status === 'upcoming';
+  const badge = getLeadBadgeStyle(lead);
+  const showMarkVisitedActions = canMarkLeadVisited(lead);
   const rawPhone = normalizePhoneForLink(lead.phone);
   const waPhone = rawPhone.replace(/\D/g, '');
   const waMessage = encodeURIComponent(
@@ -190,7 +190,7 @@ export function LeadDetailModal({ lead, visible, onClose, onMarkVisited }: Props
             ) : null}
 
             {/* Action buttons */}
-            {isUpcoming ? (
+            {showMarkVisitedActions ? (
               <View style={{ gap: 10, marginTop: 6 }}>
                 {/* Call + WhatsApp side by side */}
                 <View className="flex-row" style={{ gap: 10 }}>

@@ -1,11 +1,13 @@
 import type { Lead, LeadStatus } from '@/types/leads';
-import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
+import {
+  getLeadDisplayCategory,
+  isFutureUpcomingLead,
+  isNonVisitedLead,
+  type LeadDisplayCategory,
+} from '@utils/leadSchedule';
 import { create } from 'zustand';
 
-dayjs.extend(customParseFormat);
-
-export type LeadsFilter = 'all' | 'upcoming' | 'visited';
+export type LeadsFilter = 'all' | 'upcoming' | 'non_visited' | 'visited';
 
 type LeadsStoreState = {
   leads: Lead[];
@@ -19,11 +21,50 @@ type LeadsStoreState = {
   reset: () => void;
 };
 
+/** @deprecated Use isFutureUpcomingLead — kept for imports that expect the old name. */
 export function isUpcomingLead(lead: Lead): boolean {
-  if (lead.status !== 'upcoming') return false;
-  const appointment = dayjs(lead.appointmentDate, 'MMM D, YYYY');
-  const parsed = appointment.isValid() ? appointment : dayjs(lead.appointmentDate);
-  return parsed.isValid() && parsed.isAfter(dayjs().subtract(1, 'day'));
+  return isFutureUpcomingLead(lead);
+}
+
+export function countUpcomingLeads(leads: Lead[]): number {
+  return leads.filter(isFutureUpcomingLead).length;
+}
+
+export function countNonVisitedLeads(leads: Lead[]): number {
+  return leads.filter(isNonVisitedLead).length;
+}
+
+export function matchesLeadsFilter(lead: Lead, activeFilter: LeadsFilter): boolean {
+  if (activeFilter === 'all') {
+    return true;
+  }
+  const category = getLeadDisplayCategory(lead);
+  if (activeFilter === 'upcoming') {
+    return category === 'upcoming';
+  }
+  if (activeFilter === 'non_visited') {
+    return category === 'non_visited';
+  }
+  return category === 'visited';
+}
+
+export function getFilteredLeads(
+  leads: Lead[],
+  activeFilter: LeadsFilter,
+  searchQuery: string,
+): Lead[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  return leads.filter((lead) => {
+    const matchesFilter = matchesLeadsFilter(lead, activeFilter);
+
+    const matchesSearch =
+      normalizedQuery.length === 0 ||
+      lead.name.toLowerCase().includes(normalizedQuery) ||
+      lead.phone.replace(/\s/g, '').includes(normalizedQuery.replace(/\s/g, ''));
+
+    return matchesFilter && matchesSearch;
+  });
 }
 
 export const useLeadsStore = create<LeadsStoreState>((set) => ({
@@ -57,30 +98,4 @@ export const useLeadsStore = create<LeadsStoreState>((set) => ({
     }),
 }));
 
-export function getFilteredLeads(
-  leads: Lead[],
-  activeFilter: LeadsFilter,
-  searchQuery: string,
-): Lead[] {
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-
-  return leads.filter((lead) => {
-    let matchesFilter = true;
-    if (activeFilter === 'upcoming') {
-      matchesFilter = isUpcomingLead(lead);
-    } else if (activeFilter === 'visited') {
-      matchesFilter = lead.status === 'visited';
-    }
-
-    const matchesSearch =
-      normalizedQuery.length === 0 ||
-      lead.name.toLowerCase().includes(normalizedQuery) ||
-      lead.phone.replace(/\s/g, '').includes(normalizedQuery.replace(/\s/g, ''));
-
-    return matchesFilter && matchesSearch;
-  });
-}
-
-export function countUpcomingLeads(leads: Lead[]): number {
-  return leads.filter(isUpcomingLead).length;
-}
+export type { LeadDisplayCategory };

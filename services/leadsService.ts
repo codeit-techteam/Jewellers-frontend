@@ -40,17 +40,29 @@ function formatTime(date: string, time?: string | null): string {
 function mapAppointment(row: BackendAppointment): Lead {
   let appointmentDate = '—';
   let appointmentTime = '—';
+  let startsAt: string | null = row.starts_at ?? null;
+  let appointmentDateRaw: string | null = row.date ?? null;
+  let appointmentTimeRaw: string | null = row.time ?? null;
 
   // Prefer explicit date/time fields (stored as local values) over starts_at
   // which is stored as UTC and would shift on display in local timezone.
   if (row.date) {
     appointmentDate = formatDate(row.date);
     appointmentTime = formatTime(row.date, row.time);
+    if (!startsAt) {
+      const timePart = row.time?.trim() || '00:00';
+      const combined = dayjs(`${row.date}T${timePart.length === 5 ? `${timePart}:00` : timePart}`);
+      if (combined.isValid()) {
+        startsAt = combined.toISOString();
+      }
+    }
   } else if (row.starts_at) {
     const dt = dayjs(row.starts_at);
     if (dt.isValid()) {
       appointmentDate = dt.format('MMM D, YYYY');
       appointmentTime = dt.format('h:mm A');
+      appointmentDateRaw = dt.format('YYYY-MM-DD');
+      appointmentTimeRaw = dt.format('HH:mm');
     }
   }
 
@@ -67,6 +79,9 @@ function mapAppointment(row: BackendAppointment): Lead {
     phone: formatPhone(row.customer_phone),
     appointmentDate,
     appointmentTime,
+    startsAt,
+    appointmentDateRaw,
+    appointmentTimeRaw,
     serviceRequested: row.service_requested?.trim() || row.type || 'Consultation',
     status,
     notes: row.notes?.trim() || null,

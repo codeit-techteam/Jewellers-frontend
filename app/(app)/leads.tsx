@@ -6,6 +6,7 @@ import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useLeadsQuery } from '@hooks/useLeadsQuery';
 import { updateLeadStatusApi } from '@services/leadsService';
 import {
+  countNonVisitedLeads,
   countUpcomingLeads,
   getFilteredLeads,
   useLeadsStore,
@@ -13,7 +14,7 @@ import {
 } from '@store/useLeadsStore';
 import { useProfileStore } from '@store/useProfileStore';
 import type { Lead } from '@/types/leads';
-import { getLeadStatusBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
+import { canMarkLeadVisited, getLeadBadgeStyle, normalizePhoneForLink } from '@utils/leadHelpers';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
@@ -43,8 +44,8 @@ const LeadCard = memo(function LeadCard({
   onMarkVisited: () => void;
   onViewDetails: () => void;
 }) {
-  const badge = getLeadStatusBadgeStyle(lead.status);
-  const isUpcoming = lead.status === 'upcoming';
+  const badge = getLeadBadgeStyle(lead);
+  const showMarkVisitedActions = canMarkLeadVisited(lead);
 
   return (
     <View
@@ -117,7 +118,7 @@ const LeadCard = memo(function LeadCard({
         </View>
       ) : null}
 
-      {isUpcoming ? (
+      {showMarkVisitedActions ? (
         <View className="mt-3 flex-row items-center">
           {lead.phone !== 'Not provided' ? (
             <Pressable
@@ -188,6 +189,7 @@ export default function LeadsScreen() {
   );
 
   const upcomingCount = useMemo(() => countUpcomingLeads(leads), [leads]);
+  const nonVisitedCount = useMemo(() => countNonVisitedLeads(leads), [leads]);
 
   const handleStatusUpdate = useCallback((id: string, status: 'visited') => {
     void (async () => {
@@ -349,7 +351,8 @@ export default function LeadsScreen() {
           Your Leads
         </Text>
         <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-          {upcomingCount} Upcoming Today
+          {upcomingCount} Upcoming
+          {nonVisitedCount > 0 ? ` · ${nonVisitedCount} Non Visited` : ''}
         </Text>
       </View>
 
