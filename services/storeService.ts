@@ -25,6 +25,8 @@ function toSnakeUpdateBody(data: UpdateStoreData): Record<string, unknown> {
   if (data.name !== undefined) body.name = data.name;
   if (data.address !== undefined) body.address = data.address;
   if (data.storeTagline !== undefined) body.store_tagline = data.storeTagline;
+  if (data.latitude !== undefined) body.latitude = data.latitude;
+  if (data.longitude !== undefined) body.longitude = data.longitude;
   return body;
 }
 

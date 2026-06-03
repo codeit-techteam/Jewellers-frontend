@@ -43,6 +43,8 @@ export type UpdateStoreData = {
   name?: string;
   address?: string;
   storeTagline?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 type BackendDocument = {

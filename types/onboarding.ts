@@ -3,6 +3,9 @@ export type Step1Data = {
   ownerName: string;
   contactNumber: string;
   businessAddress: string;
+  locality?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type Step2Data = {

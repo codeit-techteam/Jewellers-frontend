@@ -1,5 +1,6 @@
 import { OnboardingScreenHeader } from '@components/onboarding/OnboardingScreenHeader';
 import { LazyExitOnboardingModal } from '@components/ui/LazyExitOnboardingModal';
+import { AddressAutocomplete } from '@components/ui/AddressAutocomplete';
 import { FormTextField } from '@components/ui/FormTextField';
 import {
   LocationIcon,
@@ -14,21 +15,18 @@ import { colors } from '@constants/colors';
 import { useFontScale } from '@hooks/useFontScale';
 import { useAsyncAction } from '@hooks/useAsyncAction';
 import { handleApiError } from '@utils/handleApiError';
-import { dialog } from '@utils/dialog';
 import { submitBusinessInfo } from '@services/onboardingService';
-import { api } from '@services/api';
+import type { PlaceResult } from '@/types/location';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { formatPhoneDisplay } from '@utils/formatPhone';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -50,14 +48,6 @@ const step1Schema = z.object({
 });
 
 type Step1FormValues = z.infer<typeof step1Schema>;
-
-type GeocodeResponse = {
-  formatted_address: string | null;
-  locality: string | null;
-  city: string | null;
-  lat: number;
-  lng: number;
-};
 
 export default function Step1BusinessInfoScreen() {
   const router = useRouter();
@@ -107,8 +97,9 @@ export default function Step1BusinessInfoScreen() {
   );
 
   const [locality, setLocality] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>();
+  const [longitude, setLongitude] = useState<number | undefined>();
   const [apiError, setApiError] = useState<string | null>(null);
-  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
   const {
     control,
@@ -133,42 +124,17 @@ export default function Step1BusinessInfoScreen() {
         ownerName: saved.ownerName,
         businessAddress: saved.businessAddress,
       });
+      if (saved.locality) setLocality(saved.locality);
+      if (saved.latitude != null) setLatitude(saved.latitude);
+      if (saved.longitude != null) setLongitude(saved.longitude);
     }
   }, [reset]);
 
-
-  const handleUseCurrentLocation = async () => {
-    setIsFetchingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        void dialog.alert('Location permission denied', 'Please enable location permission.');
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const { latitude, longitude } = position.coords;
-
-      const { data } = await api.get<GeocodeResponse>('/api/jeweller/utils/geocode', {
-        params: { lat: latitude, lng: longitude },
-      });
-
-      if (!data.formatted_address) {
-        void dialog.alert('Could not fetch location', 'Please enter manually.');
-        return;
-      }
-
-      setValue('businessAddress', data.formatted_address, { shouldValidate: true });
-      if (data.locality) {
-        setLocality(data.locality);
-      }
-    } catch {
-      void dialog.alert('Could not fetch location', 'Please enter manually.');
-    } finally {
-      setIsFetchingLocation(false);
-    }
+  const handlePlaceResolved = (place: PlaceResult) => {
+    setValue('businessAddress', place.formattedAddress, { shouldValidate: true });
+    setLocality(place.locality ?? '');
+    setLatitude(place.latitude);
+    setLongitude(place.longitude);
   };
 
   const onSubmit = async (values: Step1FormValues) => {
@@ -180,8 +146,9 @@ export default function Step1BusinessInfoScreen() {
         ownerName: values.ownerName,
         contactNumber: verifiedContactNumber,
         businessAddress: values.businessAddress,
-        // Send geocoded locality if available; backend falls back to businessAddress
         locality: locality.trim() || undefined,
+        latitude,
+        longitude,
       };
       await submitBusinessInfo(payload);
       setStep1Data(payload);
@@ -286,40 +253,21 @@ export default function Step1BusinessInfoScreen() {
             control={control}
             name="businessAddress"
             render={({ field: { onChange, onBlur, value } }) => (
-              <View>
-                <FormTextField
-                  label="Business Address"
-                  icon={<LocationIcon />}
-                  placeholder="Full street address, City, Country"
-                  multiline
-                  numberOfLines={3}
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  error={errors.businessAddress?.message}
-                  style={{ minHeight: width * 0.2 }}
-                />
-                <View className="mt-1 flex-row items-center justify-end">
-                  {isFetchingLocation ? (
-                    <ActivityIndicator size="small" color={colors.NAVY} style={{ marginRight: 8 }} />
-                  ) : null}
-                  <Pressable
-                    onPress={() => void handleUseCurrentLocation()}
-                    disabled={isFetchingLocation}
-                    hitSlop={8}
-                  >
-                    <Text
-                      style={{
-                        fontSize: label,
-                        color: isFetchingLocation ? colors.BODY_TEXT : colors.NAVY,
-                        fontWeight: '600',
-                      }}
-                    >
-                      📍 Use Current Location
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
+              <AddressAutocomplete
+                label="Business Address"
+                icon={<LocationIcon />}
+                placeholder="Search place name, street, or IT park"
+                multiline
+                numberOfLines={3}
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                onPlaceResolved={handlePlaceResolved}
+                mapInitialLatitude={latitude}
+                mapInitialLongitude={longitude}
+                error={errors.businessAddress?.message}
+                style={{ minHeight: width * 0.2 }}
+              />
             )}
           />
 

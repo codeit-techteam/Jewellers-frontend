@@ -6,12 +6,12 @@ import { getStore, updateLogo, updateStore } from '@services/storeService';
 import { useProfileStore } from '@store/useProfileStore';
 import { businessProfileSchema, type BusinessProfileFormValues } from '@utils/businessProfileFormSchema';
 import { handleApiError } from '@utils/handleApiError';
-import { api } from '@services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { usePullToRefreshCallback } from '@hooks/usePullToRefresh';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { AddressAutocomplete } from '@components/ui/AddressAutocomplete';
 import { navigateBack } from '@lib/navigateBack';
-import * as Location from 'expo-location';
+import type { PlaceResult } from '@/types/location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { ComponentProps } from 'react';
@@ -81,7 +81,8 @@ export default function BusinessProfileScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [descLength, setDescLength] = useState(0);
-  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [latitude, setLatitude] = useState<number | undefined>();
+  const [longitude, setLongitude] = useState<number | undefined>();
 
   const {
     control,
@@ -148,47 +149,14 @@ export default function BusinessProfileScreen() {
     void loadStoreProfile({ showFullScreenLoader: true });
   }, [loadStoreProfile]);
 
-  const handleUseCurrentLocation = async () => {
-    setIsFetchingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLoadError('Please enable location permission to use this feature.');
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const { latitude, longitude } = position.coords;
-
-      type GeocodeResponse = {
-        formatted_address: string | null;
-        locality: string | null;
-        city: string | null;
-        lat: number;
-        lng: number;
-      };
-
-      const { data } = await api.get<GeocodeResponse>('/api/jeweller/utils/geocode', {
-        params: { lat: latitude, lng: longitude },
-      });
-
-      if (!data.formatted_address) {
-        setLoadError('Could not fetch location. Please enter manually.');
-        return;
-      }
-
-      setValue('address', data.formatted_address);
-      if (data.locality) {
-        setValue('locality', data.locality);
-      }
-      setLoadError(null);
-    } catch {
-      setLoadError('Could not fetch location. Please enter manually.');
-    } finally {
-      setIsFetchingLocation(false);
+  const handleAddressPlaceResolved = (place: PlaceResult) => {
+    setValue('address', place.formattedAddress, { shouldValidate: true });
+    if (place.locality) {
+      setValue('locality', place.locality);
     }
+    setLatitude(place.latitude);
+    setLongitude(place.longitude);
+    setLoadError(null);
   };
 
   const handleLogoPick = async () => {
@@ -226,6 +194,8 @@ export default function BusinessProfileScreen() {
         openingTime: values.openingTime?.trim() || undefined,
         closingTime: values.closingTime?.trim() || undefined,
         workingDays: workingDays.length > 0 ? workingDays : undefined,
+        latitude,
+        longitude,
       });
       applyStoreProfile(store);
       updateProfile({
@@ -508,54 +478,25 @@ export default function BusinessProfileScreen() {
             </Text>
           ) : null}
 
-          <FieldRow icon="location-outline" hasError={Boolean(errors.address)} alignTop>
-            <Controller
-              control={control}
-              name="address"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  multiline
-                  placeholder={profile.address}
-                  placeholderTextColor={colors.BODY_TEXT}
-                  style={{
-                    fontSize: body,
-                    color: colors.NAVY,
-                    paddingVertical: 12,
-                    minHeight: 60,
-                    textAlignVertical: 'top',
-                  }}
-                />
-              )}
-            />
-          </FieldRow>
-          {errors.address ? (
-            <Text style={{ fontSize: micro, color: colors.ERROR, marginBottom: 8 }}>
-              {errors.address.message}
-            </Text>
-          ) : null}
-          <View className="mb-3 flex-row items-center justify-end" style={{ marginTop: -6 }}>
-            {isFetchingLocation ? (
-              <ActivityIndicator size="small" color={colors.NAVY} style={{ marginRight: 8 }} />
-            ) : null}
-            <Pressable
-              onPress={() => void handleUseCurrentLocation()}
-              disabled={isFetchingLocation}
-              hitSlop={8}
-            >
-              <Text
-                style={{
-                  fontSize: label,
-                  color: isFetchingLocation ? colors.BODY_TEXT : colors.NAVY,
-                  fontWeight: '600',
-                }}
-              >
-                📍 Use Current Location
-              </Text>
-            </Pressable>
-          </View>
+          <Controller
+            control={control}
+            name="address"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <AddressAutocomplete
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                onPlaceResolved={handleAddressPlaceResolved}
+                mapInitialLatitude={latitude}
+                mapInitialLongitude={longitude}
+                error={errors.address?.message}
+                placeholder={profile.address || 'Search place name, street, or IT park'}
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 60, paddingVertical: 12 }}
+              />
+            )}
+          />
 
           {/* ── Hours & Availability ── */}
           <Text
