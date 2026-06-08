@@ -95,3 +95,12 @@ export async function markRead(id: string): Promise<void> {
     throw new ApiError('Failed to mark notification as read');
   }
 }
+
+export async function deleteNotification(id: string): Promise<void> {
+  try {
+    await api.delete(`/notifications/${id}`);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to delete notification');
+  }
+}

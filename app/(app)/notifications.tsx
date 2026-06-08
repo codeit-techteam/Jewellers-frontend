@@ -2,10 +2,12 @@ import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { colors } from '@constants/colors';
 import {
+  deleteNotification as deleteNotificationApi,
   getNotifications,
   markAllRead,
   markRead,
 } from '@services/notificationsService';
+import type { NotificationsResponse } from '@/types/notifications';
 import type { AppNotification } from '@/types/notifications';
 import { handleApiError } from '@utils/handleApiError';
 import { useOnboardingStore } from '@store/useOnboardingStore';
@@ -61,12 +63,14 @@ const NotificationRow = memo(function NotificationRow({
       renderRightActions={() => (
         <Pressable
           onPress={onDelete}
+          hitSlop={{ top: 12, bottom: 12, left: 20, right: 20 }}
           accessibilityRole="button"
           accessibilityLabel={`Delete ${item.title}`}
           className="mb-2 items-center justify-center rounded-xl"
           style={{
             width: 88,
             marginLeft: 8,
+            paddingHorizontal: 20,
             backgroundColor: colors.ERROR,
           }}
         >
@@ -172,10 +176,35 @@ export default function NotificationsScreen() {
     })();
   };
 
-  const deleteNotification = (id: string) => {
-    swipeableRefs.current.get(id)?.close();
-    swipeableRefs.current.delete(id);
-  };
+  const handleDeleteNotification = useCallback(
+    (item: AppNotification) => {
+      swipeableRefs.current.get(item.id)?.close();
+      swipeableRefs.current.delete(item.id);
+
+      const previousQueries = queryClient.getQueriesData<NotificationsResponse>({
+        queryKey: ['notifications'],
+      });
+
+      queryClient.setQueriesData<NotificationsResponse>(
+        { queryKey: ['notifications'] },
+        (old) => {
+          if (!old) return old;
+          const notifications = old.notifications.filter((n) => n.id !== item.id);
+          const unreadCount =
+            !item.isRead && old.unreadCount > 0 ? old.unreadCount - 1 : old.unreadCount;
+          return { notifications, unreadCount };
+        },
+      );
+
+      void deleteNotificationApi(item.id).catch((err) => {
+        previousQueries.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
+        void dialog.alert('Error', handleApiError(err));
+      });
+    },
+    [queryClient],
+  );
 
   const handleNotificationPress = (item: AppNotification) => {
     handleToggleRead(item.id);
@@ -206,7 +235,7 @@ export default function NotificationsScreen() {
         label={label}
         micro={micro}
         onPress={() => handleNotificationPress(item)}
-        onDelete={() => deleteNotification(item.id)}
+        onDelete={() => handleDeleteNotification(item)}
         onSwipeOpen={() => closeOtherSwipeables(item.id)}
         swipeableRef={(ref) => {
           if (ref) {
@@ -217,7 +246,7 @@ export default function NotificationsScreen() {
         }}
       />
     ),
-    [body, label, micro],
+    [body, label, micro, handleDeleteNotification],
   );
 
   return (
