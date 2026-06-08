@@ -7,12 +7,14 @@ import { getStatus } from '@services/onboardingService';
 import { onAuthReset } from '@lib/authEvents';
 import { saveOnboardingMeta } from '@lib/onboardingMeta';
 import { getResumeRoute } from '@lib/getResumeRoute';
+import { extractStoreSlugFromUrl } from '@lib/deepLink';
 import { useAppStore } from '@store/useAppStore';
 import { useAuthStore } from '@store/useAuthStore';
 import { useRouter, Stack } from 'expo-router';
+import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -30,10 +32,38 @@ export default function RootLayout() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasRoutedRef = useRef(false);
+  const setPendingStoreSlug = useAppStore((state) => state.setPendingStoreSlug);
+
+  const handleDeepLink = useCallback(
+    (url: string) => {
+      const slug = extractStoreSlugFromUrl(url);
+      if (!slug) return;
+
+      setPendingStoreSlug(slug);
+
+      const { isAuthenticated, isOnboardingComplete } = useAuthStore.getState();
+      if (isAuthenticated && isOnboardingComplete) {
+        router.push('/(app)/storefront');
+      }
+    },
+    [router, setPendingStoreSlug],
+  );
 
   useEffect(() => {
     void checkPersistedAuth();
   }, [checkPersistedAuth]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    void Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    return () => subscription.remove();
+  }, [handleDeepLink]);
 
   // Allow post-logout re-login to re-run the authenticated cold-start router.
   useEffect(() => {

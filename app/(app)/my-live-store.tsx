@@ -6,7 +6,8 @@ import { getOverview, getStoreAnalytics } from '@services/analyticsService';
 import { getProducts } from '@services/inventoryService';
 import { getStore } from '@services/storeService';
 import type { AnalyticsRange } from '@/types/analytics';
-import { showComingSoonAlert, showShareComingSoonAlert } from '@utils/storeAlerts';
+import { shareStore } from '@utils/shareUtils';
+import { showComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import {
   RETURN_TO_MY_LIVE_STORE,
@@ -173,7 +174,11 @@ export default function MyLiveStoreScreen() {
           My Live Store
         </Text>
         <Pressable
-          onPress={showShareComingSoonAlert}
+          onPress={() => {
+            if (store?.id && storeName) {
+              void shareStore(storeName, store.id);
+            }
+          }}
           className="h-10 w-10 items-center justify-center"
           accessibilityLabel="Share store"
         >

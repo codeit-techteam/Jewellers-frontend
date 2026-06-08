@@ -21,7 +21,7 @@ import {
 } from '@utils/buildStorefrontInventoryProducts';
 import { matchesCategoryFilter } from '@utils/filterProductsByCategory';
 import { dialog } from '@utils/dialog';
-import { showShareComingSoonAlert } from '@utils/storeAlerts';
+import { shareStore } from '@utils/shareUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -179,7 +179,14 @@ export default function StorefrontScreen() {
           >
             <Ionicons name="create-outline" size={width * 0.05} color={colors.NAVY} />
           </Pressable>
-          <Pressable onPress={showShareComingSoonAlert} className="h-10 w-10 items-center justify-center">
+          <Pressable
+            onPress={() => {
+              if (store?.id && storeName) {
+                void shareStore(storeName, store.id);
+              }
+            }}
+            className="h-10 w-10 items-center justify-center"
+          >
             <Ionicons name="share-outline" size={width * 0.05} color={colors.NAVY} />
           </Pressable>
         </View>

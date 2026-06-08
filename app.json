@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "jewellars",
+    "scheme": "gehnahub",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -23,7 +23,21 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8F6F3"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "gehnahub.com",
+              "pathPrefix": "/store"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

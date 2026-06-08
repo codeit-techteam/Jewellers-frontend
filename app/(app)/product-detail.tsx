@@ -2,13 +2,14 @@ import { CachedImage } from '@components/ui/CachedImage';
 import { DiamondIcon } from '@components/ui/DiamondIcon';
 import { colors } from '@constants/colors';
 import { getProduct, removeProductApi } from '@services/inventoryService';
+import { getStore } from '@services/storeService';
 import type { InventoryProduct } from '@/types/inventory';
 import { useInventoryStore } from '@store/useInventoryStore';
 import { inventoryQueryKeys } from '@lib/inventoryQueryKeys';
 import { formatInr } from '@utils/formatCurrency';
 import { handleApiError } from '@utils/handleApiError';
 import { dialog } from '@utils/dialog';
-import { showShareComingSoonAlert } from '@utils/storeAlerts';
+import { shareProduct } from '@utils/shareUtils';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
 import { LoadingScreen } from '@components/ui/LoadingScreen';
 import { Ionicons } from '@expo/vector-icons';
@@ -200,7 +201,16 @@ export default function ProductDetailScreen() {
             <Ionicons name="create-outline" size={width * 0.05} color={colors.NAVY} />
           </Pressable>
           <Pressable
-            onPress={showShareComingSoonAlert}
+            onPress={() => {
+              void (async () => {
+                try {
+                  const store = await getStore();
+                  await shareProduct(product.name, product.price, store.businessName, store.id);
+                } catch {
+                  await shareProduct(product.name, product.price, 'Our Store', product.id);
+                }
+              })();
+            }}
             className="h-10 w-10 items-center justify-center"
           >
             <Ionicons name="share-outline" size={width * 0.055} color={colors.NAVY} />

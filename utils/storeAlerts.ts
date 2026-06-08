@@ -8,10 +8,6 @@ export function showComingSoonAlert(feature?: string): void {
   );
 }
 
-export function showShareComingSoonAlert(): void {
-  void dialog.alert('Coming Soon', 'Share feature coming soon');
-}
-
 export function showProductDetailComingSoonAlert(): void {
   void dialog.alert('Coming Soon', 'Product detail screen coming soon');
 }
