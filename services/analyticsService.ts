@@ -65,10 +65,26 @@ export async function getProductAnalytics(
   }
 }
 
-export async function getStoreAnalytics(): Promise<StoreAnalytics> {
+type BackendStoreAnalytics = StoreAnalytics & {
+  boutique_visits?: number;
+};
+
+function mapStoreAnalytics(data: BackendStoreAnalytics): StoreAnalytics {
+  const boutiqueVisits = data.boutiqueVisits ?? data.boutique_visits ?? data.visits ?? 0;
+  return {
+    boutiqueVisits,
+    visits: boutiqueVisits,
+    contactClicks: data.contactClicks,
+    period: data.period,
+  };
+}
+
+export async function getStoreAnalytics(range: AnalyticsRange = 'today'): Promise<StoreAnalytics> {
   try {
-    const { data } = await api.get<StoreAnalytics>('/analytics/store');
-    return data;
+    const { data } = await api.get<BackendStoreAnalytics>('/analytics/store', {
+      params: { range },
+    });
+    return mapStoreAnalytics(data);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError('Failed to load store analytics');

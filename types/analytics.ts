@@ -28,6 +28,7 @@ export type ProductAnalyticsRow = {
 };
 
 export type StoreAnalytics = {
+  boutiqueVisits: number;
   visits: number;
   contactClicks: {
     total: number;

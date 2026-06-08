@@ -1,10 +1,11 @@
+import { DashboardMetricCard } from '@components/dashboard/DashboardMetricCard';
 import { colors } from '@constants/colors';
 import { MANAGE_STORE_ACTIONS } from '@constants/storeApp';
-import dayjs from 'dayjs';
 import { useRequireOnboardingComplete } from '@hooks/useRequireOnboardingComplete';
-import { getOverview } from '@services/analyticsService';
+import { getOverview, getStoreAnalytics } from '@services/analyticsService';
 import { getProducts } from '@services/inventoryService';
 import { getStore } from '@services/storeService';
+import type { AnalyticsRange } from '@/types/analytics';
 import { showComingSoonAlert, showShareComingSoonAlert } from '@utils/storeAlerts';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -18,6 +19,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -33,6 +35,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const NAVY_BANNER = '#1B2B4B';
 
+type SnapshotRange = 'today' | 'week' | 'month';
+
+const RANGE_PILLS: { key: SnapshotRange; label: string; apiRange: AnalyticsRange }[] = [
+  { key: 'today', label: 'Today', apiRange: 'today' },
+  { key: 'week', label: 'This Week', apiRange: '7days' },
+  { key: 'month', label: 'This Month', apiRange: '30days' },
+];
+
+function toApiRange(selected: SnapshotRange): AnalyticsRange {
+  return RANGE_PILLS.find((pill) => pill.key === selected)?.apiRange ?? 'today';
+}
+
 export default function MyLiveStoreScreen() {
   useRequireOnboardingComplete();
   const router = useRouter();
@@ -46,6 +60,11 @@ export default function MyLiveStoreScreen() {
   const label = width * 0.032;
   const micro = width * 0.028;
   const button = width * 0.042;
+  const metricCardGap = width * 0.025;
+  const metricCardWidth = (width - 40 - metricCardGap) / 2;
+
+  const [selectedRange, setSelectedRange] = useState<SnapshotRange>('today');
+  const apiRange = toApiRange(selectedRange);
 
   const storeQuery = useQuery({
     queryKey: ['store'],
@@ -53,8 +72,13 @@ export default function MyLiveStoreScreen() {
   });
 
   const overviewQuery = useQuery({
-    queryKey: ['analytics', 'today'],
-    queryFn: () => getOverview('today'),
+    queryKey: ['analytics', 'overview', apiRange],
+    queryFn: () => getOverview(apiRange),
+  });
+
+  const storeAnalyticsQuery = useQuery({
+    queryKey: ['analytics', 'store', apiRange],
+    queryFn: () => getStoreAnalytics(apiRange),
   });
 
   const activeProductsQuery = useQuery({
@@ -64,12 +88,17 @@ export default function MyLiveStoreScreen() {
 
   const store = storeQuery.data;
   const overview = overviewQuery.data;
+  const storeAnalytics = storeAnalyticsQuery.data;
   const activeProducts = activeProductsQuery.data ?? [];
   const storeLoading = storeQuery.isPending;
+  const rangeStatsLoading =
+    overviewQuery.isFetching || storeAnalyticsQuery.isFetching;
+  const productsLoading = activeProductsQuery.isPending && !activeProductsQuery.data;
 
   const { isRefreshing: isLiveStoreRefreshing, onRefresh: onLiveStoreRefresh } = usePullToRefresh([
     storeQuery,
     overviewQuery,
+    storeAnalyticsQuery,
     activeProductsQuery,
   ]);
 
@@ -112,11 +141,9 @@ export default function MyLiveStoreScreen() {
     }
   };
 
-  const statCards = [
-    { label: 'VIEWS', value: String(overview?.views ?? 0) },
-    { label: 'PRODUCTS', value: String(productCount) },
-    { label: 'LEADS', value: String(overview?.appointments ?? 0) },
-  ];
+  const storeVisits = storeAnalytics?.boutiqueVisits ?? 0;
+  const productViews = overview?.productViews ?? overview?.views ?? 0;
+  const leads = overview?.appointments ?? 0;
 
   if (storeLoading && !store) {
     return (
@@ -363,24 +390,75 @@ export default function MyLiveStoreScreen() {
         <Text className="mt-5 font-bold" style={{ fontSize: h2, color: colors.NAVY }}>
           Performance Snapshot
         </Text>
-        <View className="mt-3 flex-row" style={{ gap: width * 0.025 }}>
-          {statCards.map((stat) => (
-            <View
-              key={stat.label}
-              className="flex-1 items-center rounded-xl border py-4"
-              style={{ borderColor: colors.BORDER, backgroundColor: colors.WHITE }}
-            >
-              <Text
-                className="uppercase tracking-wide"
-                style={{ fontSize: micro, color: colors.BODY_TEXT }}
+        <View className="mt-3 flex-row" style={{ gap: 8 }}>
+          {RANGE_PILLS.map((pill) => {
+            const isActive = pill.key === selectedRange;
+            return (
+              <Pressable
+                key={pill.key}
+                onPress={() => setSelectedRange(pill.key)}
+                className="flex-1 items-center rounded-full py-2"
+                style={{
+                  backgroundColor: isActive ? colors.NAVY : colors.WHITE,
+                  borderWidth: 1,
+                  borderColor: isActive ? colors.NAVY : colors.BORDER,
+                }}
               >
-                {stat.label}
-              </Text>
-              <Text className="mt-1 font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
-                {stat.value}
-              </Text>
-            </View>
-          ))}
+                <Text
+                  className="font-semibold"
+                  style={{
+                    fontSize: micro,
+                    color: isActive ? colors.WHITE : colors.BODY_TEXT,
+                  }}
+                  numberOfLines={1}
+                >
+                  {pill.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View className="mt-3 flex-row flex-wrap" style={{ gap: metricCardGap }}>
+          <DashboardMetricCard
+            icon="storefront-outline"
+            label="Store Visits"
+            value={storeVisits}
+            loading={rangeStatsLoading}
+            width={width}
+            cardWidth={metricCardWidth}
+            h1={h1}
+            micro={micro}
+          />
+          <DashboardMetricCard
+            icon="eye-outline"
+            label="Product Views"
+            value={productViews}
+            loading={rangeStatsLoading}
+            width={width}
+            cardWidth={metricCardWidth}
+            h1={h1}
+            micro={micro}
+          />
+          <DashboardMetricCard
+            icon="diamond-outline"
+            label="Products"
+            value={productCount}
+            loading={productsLoading}
+            width={width}
+            cardWidth={metricCardWidth}
+            h1={h1}
+            micro={micro}
+          />
+          <DashboardMetricCard
+            icon="calendar-outline"
+            label="Leads"
+            value={leads}
+            loading={rangeStatsLoading}
+            width={width}
+            cardWidth={metricCardWidth}
+            h1={h1}
+            micro={micro}
+          />
         </View>
 
         <Text className="mt-5 font-bold" style={{ fontSize: h2, color: colors.NAVY }}>

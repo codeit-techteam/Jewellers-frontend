@@ -8,7 +8,6 @@ import {
   STOREFRONT_CATEGORIES,
   STOREFRONT_ESTABLISHED_LABEL,
   STOREFRONT_RATING_LABEL,
-  STOREFRONT_TRUST_BADGES,
   STOREFRONT_VISIT_HOURS,
   type StorefrontCategoryTab,
 } from '@constants/storeApp';
@@ -347,28 +346,6 @@ export default function StorefrontScreen() {
           <Text className="mt-3 leading-relaxed" style={{ fontSize: body, color: colors.BODY_TEXT }}>
             {aboutText}
           </Text>
-          <View className="mt-4 flex-row flex-wrap justify-between">
-            {STOREFRONT_TRUST_BADGES.map((badge) => (
-              <View key={badge.id} className="mb-4 flex-row items-center" style={{ width: '48%' }}>
-                <View
-                  className="mr-2 items-center justify-center rounded-full"
-                  style={{
-                    width: width * 0.09,
-                    height: width * 0.09,
-                    backgroundColor: colors.INFO_BG,
-                  }}
-                >
-                  <Ionicons name={badge.icon} size={width * 0.045} color={colors.NAVY} />
-                </View>
-                <View className="flex-1">
-                  <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{badge.label}</Text>
-                  <Text className="font-bold" style={{ fontSize: label, color: colors.NAVY }}>
-                    {badge.value}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
         </View>
 
         <View className="mx-4 mt-6">

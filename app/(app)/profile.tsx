@@ -7,7 +7,11 @@ import {
   SUPPORT_PHONE,
   SUPPORT_WHATSAPP,
 } from '@constants/profile';
-import { getStore, updateCover, updateLogo } from '@services/storeService';
+import {
+  getStore,
+  updateCover as uploadCover,
+  updateLogo as uploadLogo,
+} from '@services/storeService';
 import type { BusinessDocument } from '@/types/profile';
 import { usePullToRefresh } from '@hooks/usePullToRefresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -123,7 +127,7 @@ export default function ProfileScreen() {
     }
   }, [storeQuery.data, applyStoreProfile]);
 
-  const handleLogoPick = async () => {
+  const pickLogo = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       void dialog.alert('Permission required', 'Photo library access is needed to update your logo.');
@@ -143,7 +147,7 @@ export default function ProfileScreen() {
 
     const localUri = result.assets[0].uri;
     try {
-      const logoUrl = await updateLogo(localUri);
+      const logoUrl = await uploadLogo(localUri);
       updateProfile({ logoUri: logoUrl });
       void queryClient.invalidateQueries({ queryKey: ['store'] });
     } catch (err) {
@@ -151,7 +155,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCoverPick = async () => {
+  const pickCover = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       void dialog.alert('Permission required', 'Photo library access is needed to update your cover image.');
@@ -161,7 +165,7 @@ export default function ProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [16, 9],
+      aspect: [3, 1],
       quality: 0.8,
     });
 
@@ -171,7 +175,7 @@ export default function ProfileScreen() {
 
     const localUri = result.assets[0].uri;
     try {
-      const coverUrl = await updateCover(localUri);
+      const coverUrl = await uploadCover(localUri);
       updateProfile({ coverUri: coverUrl });
       void queryClient.invalidateQueries({ queryKey: ['store'] });
     } catch (err) {
@@ -276,14 +280,15 @@ export default function ProfileScreen() {
           />
         }
       >
-        <Pressable onPress={() => void handleCoverPick()} className="relative overflow-hidden">
+        <View className="relative overflow-hidden">
           {profile.coverUri ? (
             <CachedImageBackground
               source={{ uri: profile.coverUri }}
               style={{ width: '100%', height: width * 0.36 }}
               resizeMode="cover"
             >
-              <View
+              <Pressable
+                onPress={() => void pickCover()}
                 className="absolute bottom-3 right-3 flex-row items-center rounded-full px-3 py-1.5"
                 style={{ backgroundColor: colors.OVERLAY_DARK }}
               >
@@ -291,10 +296,11 @@ export default function ProfileScreen() {
                 <Text className="ml-1 font-semibold" style={{ fontSize: micro, color: colors.WHITE }}>
                   Edit cover
                 </Text>
-              </View>
+              </Pressable>
             </CachedImageBackground>
           ) : (
-            <View
+            <Pressable
+              onPress={() => void pickCover()}
               className="items-center justify-center"
               style={{ width: '100%', height: width * 0.36, backgroundColor: colors.NAVY }}
             >
@@ -302,9 +308,9 @@ export default function ProfileScreen() {
               <Text className="mt-2 font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
                 Add cover image
               </Text>
-            </View>
+            </Pressable>
           )}
-        </Pressable>
+        </View>
 
         {storeQuery.isPending && !storeQuery.data ? (
           <View className="items-center py-6">
@@ -313,44 +319,46 @@ export default function ProfileScreen() {
         ) : null}
 
         <View className="px-5">
-        <Pressable onPress={() => void handleLogoPick()} className="-mt-10 items-center">
-          <View className="relative">
-            <View
-              className="items-center justify-center overflow-hidden rounded-2xl border"
-              style={{
-                width: 80,
-                height: 80,
-                borderColor: colors.BORDER,
-                backgroundColor: colors.SURFACE_MUTED,
-              }}
-            >
-              {profile.logoUri ? (
-                <CachedImage
-                  source={{ uri: profile.logoUri }}
-                  style={{ width: 80, height: 80 }}
-                  resizeMode="cover"
-                />
-              ) : (
-                <DiamondIcon
-                  size={width * 0.08}
-                  containerSize={72}
-                  containerColor={colors.SURFACE_MUTED}
-                  color={colors.GOLD}
-                />
-              )}
+        <View className="-mt-10 items-center">
+          <Pressable onPress={() => void pickLogo()} style={{ width: 80, height: 80 }}>
+            <View className="relative" style={{ width: 80, height: 80 }}>
+              <View
+                className="items-center justify-center overflow-hidden rounded-2xl border"
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderColor: colors.BORDER,
+                  backgroundColor: colors.SURFACE_MUTED,
+                }}
+              >
+                {profile.logoUri ? (
+                  <CachedImage
+                    source={{ uri: profile.logoUri }}
+                    style={{ width: 80, height: 80 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <DiamondIcon
+                    size={width * 0.08}
+                    containerSize={72}
+                    containerColor={colors.SURFACE_MUTED}
+                    color={colors.GOLD}
+                  />
+                )}
+              </View>
+              <View
+                className="absolute -bottom-1 -right-1 items-center justify-center rounded-full"
+                style={{
+                  width: 28,
+                  height: 28,
+                  backgroundColor: colors.NAVY,
+                }}
+              >
+                <Ionicons name="camera" size={14} color={colors.WHITE} />
+              </View>
             </View>
-            <View
-              className="absolute -bottom-1 -right-1 items-center justify-center rounded-full"
-              style={{
-                width: 28,
-                height: 28,
-                backgroundColor: colors.NAVY,
-              }}
-            >
-              <Ionicons name="camera" size={14} color={colors.WHITE} />
-            </View>
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
 
         <Text className="mt-4 text-center font-bold" style={{ fontSize: h1, color: colors.NAVY }}>
           {profile.businessName}

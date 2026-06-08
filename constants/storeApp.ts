@@ -40,13 +40,6 @@ export const MOCK_STOREFRONT_FILLER_PRODUCTS: readonly MockStorefrontFiller[] = 
   { name: 'Royal Sapphire Studs', category: 'Other', price: 1200, imageUri: '' },
 ];
 
-export const STOREFRONT_TRUST_BADGES = [
-  { id: 'certified', label: 'CERTIFIED', value: 'GIA Diamonds', icon: 'ribbon-outline' as const },
-  { id: 'return', label: 'RETURN', value: '30 Day Policy', icon: 'refresh-outline' as const },
-  { id: 'warranty', label: 'WARRANTY', value: 'Life-time', icon: 'shield-outline' as const },
-  { id: 'shipping', label: 'SHIPPING', value: 'Insured Global', icon: 'car-outline' as const },
-];
-
 export const MANAGE_STORE_ACTIONS = [
   {
     id: 'edit-info',

@@ -24,7 +24,6 @@ export const businessProfileSchema = z.object({
       return digits.length === 10 || (digits.length === 12 && digits.startsWith('91'));
     }, 'Enter a valid 10-digit number'),
   address: z.string().min(1, 'Address is required').min(10, 'Minimum 10 characters'),
-  taxId: z.string().min(1, 'Tax/GST ID is required'),
   description: z.string().max(200, 'Max 200 characters').optional(),
   locality: z.string().optional(),
   openingTime: timeField,

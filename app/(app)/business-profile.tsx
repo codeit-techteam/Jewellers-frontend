@@ -99,7 +99,6 @@ export default function BusinessProfileScreen() {
       phone: profile.phone.replace(/^\+91\s?/, ''),
       whatsappNumber: '',
       address: profile.address,
-      taxId: profile.taxId,
       description: '',
       locality: '',
       openingTime: '',
@@ -125,7 +124,6 @@ export default function BusinessProfileScreen() {
             ? store.whatsappNumber.replace(/^\+91\s?/, '').replace(/\D/g, '').slice(-10)
             : '',
           address: store.address,
-          taxId: store.documents.find((d) => d.type === 'gst')?.licenseNo ?? profile.taxId,
           description: store.description ?? '',
           locality: store.locality ?? '',
           openingTime: store.openingTime ?? '',
@@ -139,7 +137,7 @@ export default function BusinessProfileScreen() {
         }
       }
     },
-    [applyStoreProfile, profile.taxId, reset],
+    [applyStoreProfile, reset],
   );
 
   const { isRefreshing: isBusinessProfileRefreshing, onRefresh: onBusinessProfileRefresh } =
@@ -203,7 +201,6 @@ export default function BusinessProfileScreen() {
         ownerName: store.ownerName,
         phone: store.phone,
         address: store.address,
-        taxId: values.taxId.trim(),
         logoUri: store.logoUrl,
       });
       navigateBack(router, returnTo);
@@ -408,23 +405,6 @@ export default function BusinessProfileScreen() {
             </Text>
           ) : null}
 
-          <FieldRow icon="location-outline" hasError={Boolean(errors.locality)}>
-            <Controller
-              control={control}
-              name="locality"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  placeholder="e.g. Zaveri Bazaar, Mumbai"
-                  placeholderTextColor={colors.BODY_TEXT}
-                  style={{ fontSize: body, color: colors.NAVY, paddingVertical: 12 }}
-                />
-              )}
-            />
-          </FieldRow>
-
           {/* ── Contact Information ── */}
           <Text
             className="mb-2 mt-2 uppercase tracking-wider"
@@ -604,33 +584,6 @@ export default function BusinessProfileScreen() {
               );
             })}
           </View>
-
-          {/* ── Legal Information ── */}
-          <Text
-            className="mb-2 mt-2 uppercase tracking-wider"
-            style={{ fontSize: micro, color: colors.BODY_TEXT }}
-          >
-            Legal Information
-          </Text>
-          <FieldRow icon="document-text-outline" hasError={Boolean(errors.taxId)}>
-            <Controller
-              control={control}
-              name="taxId"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  placeholder={profile.taxId}
-                  placeholderTextColor={colors.BODY_TEXT}
-                  style={{ fontSize: body, color: colors.NAVY, paddingVertical: 12 }}
-                />
-              )}
-            />
-          </FieldRow>
-          {errors.taxId ? (
-            <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.taxId.message}</Text>
-          ) : null}
         </ScrollView>
 
         <View
