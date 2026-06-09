@@ -91,7 +91,7 @@ export default function StorefrontScreen() {
 
   const productsQuery = useQuery({
     queryKey: ['products', 'storefront-active'],
-    queryFn: () => getProducts({ status: 'active', is_draft: false }),
+    queryFn: () => getProducts({ is_draft: false }),
   });
 
   const { isRefreshing: isStorefrontRefreshing, onRefresh: onStorefrontRefresh } = usePullToRefresh([
@@ -321,13 +321,37 @@ export default function StorefrontScreen() {
           </Pressable>
         </View>
 
-        {filteredProducts.length === 0 ? (
+        {productsQuery.isError ? (
           <Text
-            className="mt-8 text-center"
-            style={{ fontSize: body, color: colors.BODY_TEXT }}
+            className="mt-8 px-4 text-center"
+            style={{ fontSize: body, color: colors.ERROR }}
           >
-            No products in this category yet.
+            Could not load products. Pull down to refresh.
           </Text>
+        ) : null}
+
+        {!productsQuery.isError && filteredProducts.length === 0 ? (
+          <View className="mt-8 px-4">
+            <Text
+              className="text-center"
+              style={{ fontSize: body, color: colors.BODY_TEXT }}
+            >
+              {displayProducts.length === 0
+                ? 'No published products yet. Add products in Inventory and publish them to show here.'
+                : 'No products in this category yet.'}
+            </Text>
+            {displayProducts.length === 0 ? (
+              <Pressable
+                onPress={() => router.push('/(app)/inventory')}
+                className="mt-4 items-center justify-center rounded-xl py-3"
+                style={{ backgroundColor: colors.NAVY }}
+              >
+                <Text className="font-semibold" style={{ fontSize: label, color: colors.WHITE }}>
+                  Go to Inventory
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : (
           <View className="mt-3 flex-row flex-wrap justify-between px-4">
             {filteredProducts.map((product) => (
