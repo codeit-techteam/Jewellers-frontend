@@ -27,7 +27,7 @@ function resolveApiUrl(): string {
     }
   }
 
-  return 'https://api.jewellars.com/api/jeweller';
+  return 'http://168.144.83.229:5001/api/jeweller';
 }
 
 /** Public analytics API (customer / marketplace) — same host, no jeweller prefix. */
