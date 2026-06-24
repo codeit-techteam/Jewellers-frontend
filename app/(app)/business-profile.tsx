@@ -241,7 +241,7 @@ export default function BusinessProfileScreen() {
         ) : null}
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ paddingBottom: 140 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           refreshControl={

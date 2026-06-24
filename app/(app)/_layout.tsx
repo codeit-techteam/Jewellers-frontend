@@ -31,11 +31,13 @@ export default function AppLayout() {
         tabBarShowLabel: true,
         tabBarStyle: {
           backgroundColor: colors.WHITE,
-          borderTopWidth: 1,
+          borderTopWidth: 0.5,
           borderTopColor: colors.BORDER,
           height: tabBarHeight,
-          paddingBottom: insets.bottom + 4,
-          paddingTop: 6,
+          paddingBottom: insets.bottom + 8,
+          paddingTop: 8,
+          elevation: 8,
+          shadowOpacity: 0,
         },
       }}
     >

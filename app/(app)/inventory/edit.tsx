@@ -6,7 +6,7 @@ import { getProduct, removeProductApi, updateProductApi } from '@services/invent
 import { useInventoryStore } from '@store/useInventoryStore';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InventoryProduct } from '@/types/inventory';
-import { calculateProductPrice } from '@utils/calculateProductPrice';
+import { resolveProductPrice } from '@utils/calculateProductPrice';
 import { handleApiError } from '@utils/handleApiError';
 import { navigateBack } from '@lib/navigateBack';
 import { ErrorScreen } from '@components/ui/ErrorScreen';
@@ -75,14 +75,12 @@ export default function EditProductScreen() {
     }
     setIsSubmitting(true);
     try {
-      const price =
-        updated.weight > 0
-          ? calculateProductPrice(
-              updated.weight,
-              updated.makingChargesType,
-              updated.makingChargesValue,
-            )
-          : product.price;
+      const price = resolveProductPrice(
+        updated.weight,
+        updated.makingChargesType,
+        updated.makingChargesValue,
+        updated.priceBreakup,
+      );
       const saved = await updateProductApi(product.id, { ...updated, price, isDraft: false });
       updateProduct(product.id, saved);
       void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
@@ -135,6 +133,7 @@ export default function EditProductScreen() {
       <View style={{ flex: 1 }}>
         <LazyInventoryProductForm
           mode="edit"
+          embeddedInTabs
           initialProduct={product}
           isSubmitting={isSubmitting}
           onSubmit={(p, m) => void handleSubmit(p, m)}

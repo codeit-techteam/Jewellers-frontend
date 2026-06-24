@@ -11,7 +11,6 @@ import {
 import { useInventoryStore } from '@store/useInventoryStore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AddProductForm, InventoryProduct } from '@/types/inventory';
-import { calculateProductPrice } from '@utils/calculateProductPrice';
 import { handleApiError } from '@utils/handleApiError';
 import { Ionicons } from '@expo/vector-icons';
 import { navigateBack } from '@lib/navigateBack';
@@ -38,12 +37,13 @@ function toAddProductForm(product: InventoryProduct): AddProductForm {
     gender: product.gender,
     occasion: product.occasion,
     style: product.style,
+    collectionIds: product.collectionIds ?? [],
     availableSizes: product.availableSizes,
     availableMetals: product.availableMetals,
     discountPercent: product.discountPercent,
     priceBreakup: product.priceBreakup,
     specifications: product.specifications,
-    collectionName: product.collectionName,
+    collectionName: product.collections?.[0] ?? product.collectionName,
     videoUri: product.videoUri,
     videoUrl: product.videoUrl,
   };
@@ -86,17 +86,12 @@ export default function AddProductScreen() {
   const handleSubmit = async (product: InventoryProduct, mode: InventoryFormSubmitMode) => {
     setIsSubmitting(true);
     try {
-      const price = calculateProductPrice(
-        product.weight,
-        product.makingChargesType,
-        product.makingChargesValue,
-      );
       const formData = toAddProductForm(product);
 
       if (isCompleteDraftMode && productId) {
         // Updating an existing draft product — use PUT, not POST
         const isDraft = mode === 'draft';
-        const saved = await updateProductApi(productId, { ...product, price, isDraft });
+        const saved = await updateProductApi(productId, { ...product, isDraft });
         updateProduct(productId, saved);
         void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
         navigateBack(router, returnTo);
@@ -140,6 +135,7 @@ export default function AddProductScreen() {
       <View style={{ flex: 1 }}>
         <LazyInventoryProductForm
           mode="add"
+          embeddedInTabs
           initialProduct={isCompleteDraftMode ? draftProduct : undefined}
           isSubmitting={isSubmitting}
           onSubmit={(p, m) => void handleSubmit(p, m)}

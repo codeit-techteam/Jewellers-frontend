@@ -1,9 +1,22 @@
 import { SelectPickerModal } from '@components/ui/SelectPickerModal';
 import { pickImageFromLibrary } from '@components/ui/DocumentUploader';
+import {
+  CollectionNameSection,
+  GenderChipSection,
+  MultiChipSection,
+  PuritySection,
+} from '@components/inventory/ProductFormChips';
 import { colors } from '@constants/colors';
 import * as ImagePicker from 'expo-image-picker';
-import { DEFAULT_PURITY, PURITY_OPTIONS } from '@constants/inventory';
+import {
+  DEFAULT_PURITY,
+  GENDER_CHIP_OPTIONS,
+  METAL_OPTIONS,
+  OCCASION_OPTIONS,
+  STYLE_OPTIONS,
+} from '@constants/inventory';
 import { useCategories } from '@hooks/useCategories';
+import { useCollections } from '@hooks/useCollections';
 import type { SelectOption } from '@components/ui/SelectPickerModal';
 import { formatCategoryName } from '@utils/categoryLabel';
 import type { InventoryProduct } from '@/types/inventory';
@@ -12,11 +25,12 @@ import {
   inventoryProductEditSchema,
   inventoryProductStrictSchema,
 } from '@utils/inventoryFormSchema';
-import { calculateProductPrice, generateProductSku } from '@utils/calculateProductPrice';
+import { generateProductSku, resolveProductPrice } from '@utils/calculateProductPrice';
 import { dialog } from '@utils/dialog';
+import { normalizeGenderValues, parseStringArrayField } from '@utils/productTagFields';
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
@@ -31,6 +45,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type InventoryFormSubmitMode = 'draft' | 'publish' | 'update' | 'delete';
 
@@ -40,6 +55,8 @@ type InventoryProductFormProps = {
   isSubmitting: boolean;
   onSubmit: (product: InventoryProduct, mode: InventoryFormSubmitMode) => void;
   onDelete?: () => void;
+  /** When true, footer sits directly above the tab bar — skip safe-area bottom padding */
+  embeddedInTabs?: boolean;
 };
 
 type PriceBreakupState = { gold: string; gemstone: string; makingCharge: string; gst: string };
@@ -49,23 +66,18 @@ type FormValues = {
   name: string;
   categoryId: string;
   weight: string;
-  purity: string;
+  purity?: string;
   makingChargesType: 'percentage' | 'flat';
   makingChargesValue: string;
-  description: string;
-  discountPercent: string;
-  collectionName: string;
+  description?: string;
+  discountPercent?: string;
 };
 
-const GENDER_OPTIONS = ['Male', 'Female', 'Unisex', 'Kids'];
-const OCCASION_OPTIONS = ['Wedding', 'Engagement', 'Casual', 'Festival', 'Daily Wear', 'Gift'];
-const STYLE_OPTIONS = ['Traditional', 'Modern', 'Fusion', 'Antique', 'Minimalist'];
 const RING_SIZES = ['6', '8', '10', '12', '14', '16', '18', '20'];
 const BANGLE_SIZES = ['2/2', '2/4', '2/6', '2/8', '2/10', '2/12'];
 const WRIST_SIZES = ['6"', '6.5"', '7"', '7.5"', '8"', '8.5"'];
-const CHAIN_LENGTHS = ['14"', '16"', '18"', '20"', '22"', '24"'];
+const CHAIN_LENGTHS = ['14', '16', '18', '20', '22', '24'];
 const GENERAL_SIZES = ['XS', 'S', 'M', 'L', 'XL'];
-const METAL_OPTIONS = ['Yellow Gold', 'White Gold', 'Rose Gold', 'Silver', 'Platinum'];
 
 // ── Category-specific field config ───────────────────────────────────────────
 
@@ -104,129 +116,12 @@ const defaultFormValues: FormValues = {
   name: '',
   categoryId: '',
   weight: '',
-  purity: DEFAULT_PURITY,
+  purity: '',
   makingChargesType: 'percentage',
   makingChargesValue: '5.00',
   description: '',
   discountPercent: '',
-  collectionName: '',
 };
-
-// ── Chip row (single-select) ──────────────────────────────────────────────────
-
-type SingleChipRowProps = {
-  label: string;
-  options: string[];
-  selected: string;
-  onSelect: (val: string) => void;
-  labelSize: number;
-  micro: number;
-};
-
-function SingleChipRow({ label, options, selected, onSelect, labelSize, micro }: SingleChipRowProps) {
-  return (
-    <View className="mt-3">
-      <Text className="mb-2 font-medium" style={{ fontSize: labelSize, color: colors.NAVY }}>
-        {label}
-      </Text>
-      <View className="flex-row flex-wrap" style={{ gap: 6 }}>
-        {options.map((opt) => {
-          const active = selected === opt;
-          return (
-            <Pressable
-              key={opt}
-              onPress={() => onSelect(active ? '' : opt)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 20,
-                backgroundColor: active ? colors.NAVY : colors.WHITE,
-                borderWidth: 1,
-                borderColor: active ? colors.NAVY : colors.BORDER,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: micro,
-                  color: active ? colors.WHITE : colors.BODY_TEXT,
-                  fontWeight: active ? '600' : '400',
-                }}
-              >
-                {opt}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ── Chip row (multi-select) ───────────────────────────────────────────────────
-
-type MultiChipRowProps = {
-  label: string;
-  optionRows: string[][];
-  selected: string[];
-  onToggle: (val: string) => void;
-  labelSize: number;
-  micro: number;
-  helper?: string;
-};
-
-function MultiChipRow({
-  label,
-  optionRows,
-  selected,
-  onToggle,
-  labelSize,
-  micro,
-  helper,
-}: MultiChipRowProps) {
-  return (
-    <View className="mt-3">
-      <Text className="mb-1 font-medium" style={{ fontSize: labelSize, color: colors.NAVY }}>
-        {label}
-      </Text>
-      {helper ? (
-        <Text className="mb-2" style={{ fontSize: micro, color: colors.BODY_TEXT }}>
-          {helper}
-        </Text>
-      ) : null}
-      {optionRows.map((row, ri) => (
-        <View key={ri} className="flex-row flex-wrap" style={{ gap: 6, marginBottom: 6 }}>
-          {row.map((opt) => {
-            const active = selected.includes(opt);
-            return (
-              <Pressable
-                key={opt}
-                onPress={() => onToggle(opt)}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                  backgroundColor: active ? colors.NAVY : colors.WHITE,
-                  borderWidth: 1,
-                  borderColor: active ? colors.NAVY : colors.BORDER,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: micro,
-                    color: active ? colors.WHITE : colors.BODY_TEXT,
-                    fontWeight: active ? '600' : '400',
-                  }}
-                >
-                  {opt}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
 
 // ── Collapsible section header ────────────────────────────────────────────────
 
@@ -298,19 +193,37 @@ function RupeeInput({ label, value, onChangeText, placeholder = '0', body, micro
 
 // ── Main form ─────────────────────────────────────────────────────────────────
 
+function SaveProductCheckIcon() {
+  return (
+    <View
+      style={{
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: colors.WHITE, fontSize: 11, fontWeight: '700' }}>✓</Text>
+    </View>
+  );
+}
+
 export function InventoryProductForm({
   mode,
   initialProduct,
   isSubmitting,
   onSubmit,
   onDelete,
+  embeddedInTabs = false,
 }: InventoryProductFormProps) {
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const h2 = width * 0.048;
   const body = width * 0.038;
   const label = width * 0.032;
   const micro = width * 0.028;
-  const button = width * 0.042;
 
   // ── Images ─────────────────────────────────────────────────────────────────
   const [imageUris, setImageUris] = useState<string[]>(
@@ -326,17 +239,48 @@ export function InventoryProductForm({
 
   // ── Category / purity pickers ──────────────────────────────────────────────
   const { data: categories = [], isLoading: isLoadingCategories } = useCategories();
+  const { data: cmsCollections = [], isLoading: collectionsLoading } = useCollections();
   const categoryOptions: SelectOption[] = categories.map((c) => ({
     value: c.id,
     label: formatCategoryName(c.name),
   }));
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  const [purityModalVisible, setPurityModalVisible] = useState(false);
 
-  // ── New optional fields state ──────────────────────────────────────────────
-  const [gender, setGender] = useState<string>(initialProduct?.gender ?? '');
-  const [occasion, setOccasion] = useState<string>(initialProduct?.occasion ?? '');
-  const [style, setStyle] = useState<string>(initialProduct?.style ?? '');
+  // ── Tag / enrichment state ─────────────────────────────────────────────────
+  const [gender, setGender] = useState<string[]>(
+    normalizeGenderValues(parseStringArrayField(initialProduct?.gender)),
+  );
+  const [occasion, setOccasion] = useState<string[]>(
+    parseStringArrayField(initialProduct?.occasion),
+  );
+  const [style, setStyle] = useState<string[]>(parseStringArrayField(initialProduct?.style));
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>(
+    initialProduct?.collectionIds?.length ? [...initialProduct.collectionIds] : [],
+  );
+  const legacyCollectionsHydrated = useRef(false);
+
+  useEffect(() => {
+    if (legacyCollectionsHydrated.current) return;
+    if (selectedCollectionIds.length > 0 || cmsCollections.length === 0) return;
+
+    const legacyNames = initialProduct?.collections?.length
+      ? initialProduct.collections
+      : initialProduct?.collectionName
+        ? [initialProduct.collectionName]
+        : [];
+    if (!legacyNames.length) return;
+
+    const matched = cmsCollections
+      .filter((col) =>
+        legacyNames.some((name) => name.trim().toLowerCase() === col.title.trim().toLowerCase()),
+      )
+      .map((col) => col.id);
+
+    if (matched.length > 0) {
+      setSelectedCollectionIds(matched);
+      legacyCollectionsHydrated.current = true;
+    }
+  }, [cmsCollections, initialProduct, selectedCollectionIds.length]);
   const [availableSizes, setAvailableSizes] = useState<string[]>(
     initialProduct?.availableSizes ?? [],
   );
@@ -410,7 +354,6 @@ export function InventoryProductForm({
           discountPercent: initialProduct.discountPercent
             ? String(initialProduct.discountPercent)
             : '',
-          collectionName: initialProduct.collectionName ?? '',
         }
       : defaultFormValues,
     mode: 'onChange',
@@ -469,22 +412,44 @@ export function InventoryProductForm({
       prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val],
     );
 
+  const toggleArrayValue = (
+    setter: (fn: (prev: string[]) => string[]) => void,
+    val: string,
+  ) => setter((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
+
+  const toggleCollection = (id: string) => toggleArrayValue(setSelectedCollectionIds, id);
+
   // ── Build product ──────────────────────────────────────────────────────────
   const buildProduct = (values: FormValues, isDraft: boolean): InventoryProduct => {
     const weight = Number(values.weight) || 0;
     const makingChargesValue = Number(values.makingChargesValue) || 0;
-    const price = isDraft
-      ? 0
-      : calculateProductPrice(weight, values.makingChargesType, makingChargesValue);
-
-    const categoryName =
-      categories.find((c) => c.id === values.categoryId)?.name ?? selectedCategoryLabel;
-
     const pbGold = Number(priceBreakup.gold) || 0;
     const pbGemstone = Number(priceBreakup.gemstone) || 0;
     const pbMaking = Number(priceBreakup.makingCharge) || 0;
     const pbGst = Number(priceBreakup.gst) || 0;
     const hasPriceBreakup = pbGold || pbGemstone || pbMaking || pbGst;
+
+    const resolvedBreakup = hasPriceBreakup
+      ? {
+          gold: pbGold,
+          gemstone: pbGemstone,
+          makingCharge: pbMaking,
+          gst: pbGst,
+          total: pbGold + pbGemstone + pbMaking + pbGst,
+        }
+      : undefined;
+
+    const price = isDraft
+      ? 0
+      : resolveProductPrice(
+          weight,
+          values.makingChargesType,
+          makingChargesValue,
+          resolvedBreakup,
+        );
+
+    const categoryName =
+      categories.find((c) => c.id === values.categoryId)?.name ?? selectedCategoryLabel;
 
     const hasSpecs =
       specifications.carat || specifications.dimensions || specifications.certification;
@@ -495,9 +460,9 @@ export function InventoryProductForm({
       sku: initialProduct?.sku ?? generateProductSku(categoryName || 'PR'),
       categoryId: values.categoryId,
       category: categoryName || '—',
-      price: initialProduct?.price && mode === 'edit' ? initialProduct.price : price,
+      price,
       weight,
-      purity: values.purity,
+      purity: values.purity?.trim() || '',
       makingChargesType: values.makingChargesType,
       makingChargesValue,
       imageUri: imageUris[0] ?? '',
@@ -512,21 +477,14 @@ export function InventoryProductForm({
       createdAt: initialProduct?.createdAt ?? new Date().toISOString(),
       description: values.description || undefined,
       additionalDetails: values.description || undefined,
-      gender: gender || undefined,
-      occasion: occasion || undefined,
-      style: style || undefined,
+      gender: gender.length > 0 ? gender : undefined,
+      occasion: occasion.length > 0 ? occasion : undefined,
+      style: style.length > 0 ? style : undefined,
+      collectionIds: selectedCollectionIds,
       availableSizes: availableSizes.length > 0 ? availableSizes : undefined,
       availableMetals: availableMetals.length > 0 ? availableMetals : undefined,
       discountPercent: values.discountPercent ? Number(values.discountPercent) : undefined,
-      priceBreakup: hasPriceBreakup
-        ? {
-            gold: pbGold,
-            gemstone: pbGemstone,
-            makingCharge: pbMaking,
-            gst: pbGst,
-            total: pbGold + pbGemstone + pbMaking + pbGst,
-          }
-        : undefined,
+      priceBreakup: resolvedBreakup,
       specifications: hasSpecs
         ? {
             carat: specifications.carat || undefined,
@@ -534,7 +492,9 @@ export function InventoryProductForm({
             certification: specifications.certification || undefined,
           }
         : undefined,
-      collectionName: values.collectionName || undefined,
+      collectionName:
+        cmsCollections.find((c) => c.id === selectedCollectionIds[0])?.title ??
+        initialProduct?.collectionName,
       videoUri: videoUri || undefined,
     };
   };
@@ -555,14 +515,7 @@ export function InventoryProductForm({
     const product = buildProduct(values, false);
     if (mode === 'edit') {
       onSubmit(
-        {
-          ...product,
-          price: calculateProductPrice(
-            product.weight,
-            product.makingChargesType,
-            product.makingChargesValue,
-          ),
-        },
+        product,
         'update',
       );
       return;
@@ -577,19 +530,93 @@ export function InventoryProductForm({
     (Number(priceBreakup.makingCharge) || 0) +
     (Number(priceBreakup.gst) || 0);
 
+  const canSaveProduct = !isSubmitting && imageUris.length > 0;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <View style={{ flex: 1, backgroundColor: colors.WHITE }}>
       <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 140 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 12,
+          paddingBottom: 16,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── SECTION 1: Images ── */}
+        {/* ── Product Name ── */}
+        <Text className="mb-1 mt-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
+          Product Name
+        </Text>
+        <Controller
+          control={control}
+          name="name"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              placeholder="e.g. Emerald Drop Necklace"
+              placeholderTextColor={colors.BODY_TEXT}
+              className="rounded-xl border px-4 py-3"
+              style={{
+                borderColor: errors.name ? colors.ERROR : colors.BORDER,
+                fontSize: body,
+                color: colors.NAVY,
+              }}
+            />
+          )}
+        />
+        {errors.name ? (
+          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.name.message}</Text>
+        ) : null}
+
+        {/* ── Category ── */}
+        <Text className="mb-1 mt-3 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
+          Category
+        </Text>
+        <Controller
+          control={control}
+          name="categoryId"
+          render={({ field: { onChange, value } }) => (
+            <>
+              <Pressable
+                onPress={() => {
+                  if (!isLoadingCategories && categoryOptions.length > 0) {
+                    setCategoryModalVisible(true);
+                  }
+                }}
+                className="flex-row items-center justify-between rounded-xl border px-4 py-3"
+                style={{ borderColor: errors.categoryId ? colors.ERROR : colors.BORDER }}
+              >
+                <Text style={{ fontSize: body, color: value ? colors.NAVY : colors.BODY_TEXT }}>
+                  {isLoadingCategories
+                    ? 'Loading categories…'
+                    : selectedCategoryLabel || 'Select Category'}
+                </Text>
+                <Ionicons name="chevron-down" size={width * 0.04} color={colors.BODY_TEXT} />
+              </Pressable>
+              <SelectPickerModal
+                visible={categoryModalVisible}
+                title="Select category"
+                options={categoryOptions}
+                selectedValue={value}
+                onSelect={onChange}
+                onClose={() => setCategoryModalVisible(false)}
+              />
+            </>
+          )}
+        />
+        {errors.categoryId ? (
+          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.categoryId.message}</Text>
+        ) : null}
+
+        {/* ── Product Images ── */}
         <View style={{ marginTop: 4 }}>
           {imageUris.length === 0 ? (
             <Pressable
@@ -717,137 +744,36 @@ export function InventoryProductForm({
           </Pressable>
         )}
 
-        {/* ── Product Name ── */}
-        <Text className="mb-1 mt-4 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-          Product Name
-        </Text>
-        <Controller
-          control={control}
-          name="name"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              value={value}
-              onChangeText={onChange}
-              onBlur={onBlur}
-              placeholder="e.g. Emerald Drop Necklace"
-              placeholderTextColor={colors.BODY_TEXT}
-              className="rounded-xl border px-4 py-3"
-              style={{
-                borderColor: errors.name ? colors.ERROR : colors.BORDER,
-                fontSize: body,
-                color: colors.NAVY,
-              }}
-            />
-          )}
-        />
-        {errors.name ? (
-          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.name.message}</Text>
-        ) : null}
-
-        {/* ── Category ── */}
-        <Text className="mb-1 mt-3 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-          Category
-        </Text>
-        <Controller
-          control={control}
-          name="categoryId"
-          render={({ field: { onChange, value } }) => (
-            <>
-              <Pressable
-                onPress={() => {
-                  if (!isLoadingCategories && categoryOptions.length > 0) {
-                    setCategoryModalVisible(true);
-                  }
-                }}
-                className="flex-row items-center justify-between rounded-xl border px-4 py-3"
-                style={{ borderColor: errors.categoryId ? colors.ERROR : colors.BORDER }}
+        {/* ── Weight ── */}
+        <View className="mt-4">
+          <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
+            Weight (g)
+          </Text>
+          <Controller
+            control={control}
+            name="weight"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <View
+                className="flex-row items-center rounded-xl border px-3"
+                style={{ borderColor: errors.weight ? colors.ERROR : colors.BORDER }}
               >
-                <Text style={{ fontSize: body, color: value ? colors.NAVY : colors.BODY_TEXT }}>
-                  {isLoadingCategories
-                    ? 'Loading categories…'
-                    : selectedCategoryLabel || 'Select Category'}
-                </Text>
-                <Ionicons name="chevron-down" size={width * 0.04} color={colors.BODY_TEXT} />
-              </Pressable>
-              <SelectPickerModal
-                visible={categoryModalVisible}
-                title="Select category"
-                options={categoryOptions}
-                selectedValue={value}
-                onSelect={onChange}
-                onClose={() => setCategoryModalVisible(false)}
-              />
-            </>
-          )}
-        />
-        {errors.categoryId ? (
-          <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.categoryId.message}</Text>
-        ) : null}
-
-        {/* ── Weight + Purity ── */}
-        <View className="mt-3 flex-row" style={{ gap: width * 0.03 }}>
-          <View className="flex-1">
-            <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-              Weight (g)
-            </Text>
-            <Controller
-              control={control}
-              name="weight"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <View
-                  className="flex-row items-center rounded-xl border px-3"
-                  style={{ borderColor: errors.weight ? colors.ERROR : colors.BORDER }}
-                >
-                  <TextInput
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    placeholder="0.00"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor={colors.BODY_TEXT}
-                    className="flex-1 py-3"
-                    style={{ fontSize: body, color: colors.NAVY }}
-                  />
-                  <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>g</Text>
-                </View>
-              )}
-            />
-            {errors.weight ? (
-              <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.weight.message}</Text>
-            ) : null}
-          </View>
-
-          <View className="flex-1">
-            <Text className="mb-1 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-              Purity
-            </Text>
-            <Controller
-              control={control}
-              name="purity"
-              render={({ field: { onChange, value } }) => (
-                <>
-                  <Pressable
-                    onPress={() => setPurityModalVisible(true)}
-                    className="flex-row items-center justify-between rounded-xl border px-3 py-3"
-                    style={{ borderColor: colors.BORDER }}
-                  >
-                    <Text style={{ fontSize: label, color: colors.NAVY }} numberOfLines={1}>
-                      {value}
-                    </Text>
-                    <Ionicons name="chevron-down" size={width * 0.035} color={colors.BODY_TEXT} />
-                  </Pressable>
-                  <SelectPickerModal
-                    visible={purityModalVisible}
-                    title="Select purity"
-                    options={PURITY_OPTIONS}
-                    selectedValue={value}
-                    onSelect={onChange}
-                    onClose={() => setPurityModalVisible(false)}
-                  />
-                </>
-              )}
-            />
-          </View>
+                <TextInput
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  placeholder="0.00"
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={colors.BODY_TEXT}
+                  className="flex-1 py-3"
+                  style={{ fontSize: body, color: colors.NAVY }}
+                />
+                <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>g</Text>
+              </View>
+            )}
+          />
+          {errors.weight ? (
+            <Text style={{ fontSize: micro, color: colors.ERROR }}>{errors.weight.message}</Text>
+          ) : null}
         </View>
 
         {/* ── Making Charges ── */}
@@ -971,81 +897,94 @@ export function InventoryProductForm({
           )}
         />
 
-        {/* ── SECTION 3: Tags ── */}
+        {/* ── Tags: Gender, Occasion, Style ── */}
         <View style={{ height: 1, backgroundColor: colors.BORDER, marginTop: 20 }} />
-        <Text className="mt-4 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
-          Tags{' '}
-          <Text style={{ fontSize: micro, color: colors.BODY_TEXT, fontWeight: '400' }}>
-            (optional)
-          </Text>
-        </Text>
 
-        <SingleChipRow
-          label="Gender"
-          options={GENDER_OPTIONS}
+        <GenderChipSection
+          options={GENDER_CHIP_OPTIONS}
           selected={gender}
-          onSelect={setGender}
-          labelSize={label}
-          micro={micro}
-        />
-        <SingleChipRow
-          label="Occasion"
-          options={OCCASION_OPTIONS}
-          selected={occasion}
-          onSelect={setOccasion}
-          labelSize={label}
-          micro={micro}
-        />
-        <SingleChipRow
-          label="Style"
-          options={STYLE_OPTIONS}
-          selected={style}
-          onSelect={setStyle}
+          onToggle={(val) => toggleArrayValue(setGender, val)}
           labelSize={label}
           micro={micro}
         />
 
-        {/* ── SECTION 4: Available Sizes (dynamic by category) ── */}
+        <MultiChipSection
+          label="Occasion"
+          optional
+          options={[...OCCASION_OPTIONS]}
+          selected={occasion}
+          onToggle={(val) => toggleArrayValue(setOccasion, val)}
+          labelSize={label}
+          micro={micro}
+        />
+
+        <MultiChipSection
+          label="Style"
+          optional
+          options={[...STYLE_OPTIONS]}
+          selected={style}
+          onToggle={(val) => toggleArrayValue(setStyle, val)}
+          labelSize={label}
+          micro={micro}
+        />
+
+        <CollectionNameSection
+          collections={cmsCollections}
+          loading={collectionsLoading}
+          selectedIds={selectedCollectionIds}
+          onToggle={toggleCollection}
+          labelSize={label}
+          micro={micro}
+        />
+
+        <Controller
+          control={control}
+          name="purity"
+          render={({ field: { onChange, value } }) => (
+            <PuritySection
+              purity={value ?? ''}
+              onSelectPreset={(preset) => onChange(preset)}
+              onCustomChange={onChange}
+              labelSize={label}
+              micro={micro}
+              body={body}
+            />
+          )}
+        />
+
+        {/* ── Available Sizes (dynamic by category) ── */}
         {categoryConfig.showSizes && (
           <>
             <View style={{ height: 1, backgroundColor: colors.BORDER, marginTop: 20 }} />
-            <Text className="mt-4 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
-              {categoryConfig.sizeLabel}{' '}
-              <Text style={{ fontSize: micro, color: colors.BODY_TEXT, fontWeight: '400' }}>
-                (optional)
-              </Text>
-            </Text>
-            <MultiChipRow
-              label=""
-              optionRows={[categoryConfig.sizeOptions]}
+            <MultiChipSection
+              label={categoryConfig.sizeLabel}
+              optional
+              subtitle={
+                availableSizes.length === 0 ? 'Tap to select available sizes' : undefined
+              }
+              options={categoryConfig.sizeOptions}
               selected={availableSizes}
               onToggle={toggleSize}
               labelSize={label}
               micro={micro}
-              helper={availableSizes.length === 0 ? 'Tap to select available sizes' : undefined}
             />
           </>
         )}
 
-        {/* ── SECTION 5: Available Metals ── */}
+        {/* ── Available Metals ── */}
         <View style={{ height: 1, backgroundColor: colors.BORDER, marginTop: 20 }} />
-        <Text className="mt-4 font-bold" style={{ fontSize: body, color: colors.NAVY }}>
-          Available Metals{' '}
-          <Text style={{ fontSize: micro, color: colors.BODY_TEXT, fontWeight: '400' }}>
-            (optional)
-          </Text>
-        </Text>
 
-        <MultiChipRow
-          label=""
-          optionRows={[METAL_OPTIONS]}
+        <MultiChipSection
+          label="Available Metals"
+          optional
+          options={[...METAL_OPTIONS]}
           selected={availableMetals}
           onToggle={toggleMetal}
           labelSize={label}
           micro={micro}
         />
 
-        {/* ── SECTION 6: Price Breakup ── */}
+        {/* ── Price Breakup ── */}
         <View style={{ height: 1, backgroundColor: colors.BORDER, marginTop: 20 }} />
         <CollapsibleHeader
           title="Price Breakup"
@@ -1198,57 +1137,78 @@ export function InventoryProductForm({
             {errors.discountPercent.message}
           </Text>
         ) : null}
-
-        {/* ── SECTION 9: Collection Name ── */}
-        <Text className="mb-1 mt-4 font-medium" style={{ fontSize: label, color: colors.NAVY }}>
-          Collection Name
-        </Text>
-        <Controller
-          control={control}
-          name="collectionName"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              value={value}
-              onChangeText={onChange}
-              onBlur={onBlur}
-              placeholder="e.g. Bridal Collection, Summer 2025"
-              placeholderTextColor={colors.BODY_TEXT}
-              className="rounded-xl border px-4 py-3"
-              style={{ borderColor: colors.BORDER, fontSize: body, color: colors.NAVY }}
-            />
-          )}
-        />
       </ScrollView>
 
-      {/* ── Footer ── */}
-      <View className="flex-row border-t px-5 py-3" style={{ borderColor: colors.BORDER }}>
+      {/* ── Footer — flush above tab bar when embeddedInTabs ── */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          paddingHorizontal: 16,
+          paddingTop: 14,
+          paddingBottom: embeddedInTabs ? 14 : insets.bottom + 14,
+          backgroundColor: colors.WHITE,
+          borderTopWidth: 0.5,
+          borderTopColor: colors.BORDER,
+        }}
+      >
         {mode === 'add' ? (
           <>
             <Pressable
               onPress={onSaveDraft}
               disabled={isSubmitting}
-              className="flex-1 items-center justify-center rounded-xl border py-3"
-              style={{ borderColor: colors.BORDER }}
+              style={{
+                flex: 1,
+                height: 52,
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: colors.GOLD,
+                backgroundColor: colors.WHITE,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: isSubmitting ? 0.5 : 1,
+              }}
             >
-              <Text className="font-semibold" style={{ fontSize: button, color: colors.NAVY }}>
+              <Text
+                style={{
+                  color: '#1A1A2E',
+                  fontSize: 15,
+                  fontWeight: '600',
+                  letterSpacing: 0.2,
+                }}
+              >
                 Save Draft
               </Text>
             </Pressable>
             <Pressable
               onPress={() => void onSaveProduct()}
-              disabled={isSubmitting || imageUris.length === 0}
-              className="ml-2 flex-1 flex-row items-center justify-center rounded-xl py-3"
+              disabled={!canSaveProduct}
               style={{
-                backgroundColor:
-                  isSubmitting || imageUris.length === 0 ? colors.SURFACE_MUTED : colors.NAVY,
+                flex: 1.4,
+                height: 52,
+                borderRadius: 14,
+                backgroundColor: colors.NAVY,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 8,
+                opacity: !canSaveProduct ? 0.45 : 1,
               }}
             >
               {isSubmitting ? (
                 <ActivityIndicator color={colors.WHITE} />
               ) : (
                 <>
-                  <Ionicons name="checkmark-circle" size={width * 0.05} color={colors.WHITE} />
-                  <Text className="ml-1 font-semibold" style={{ fontSize: button, color: colors.WHITE }}>
+                  <SaveProductCheckIcon />
+                  <Text
+                    style={{
+                      color: colors.WHITE,
+                      fontSize: 15,
+                      fontWeight: '700',
+                      letterSpacing: 0.2,
+                    }}
+                  >
                     Save Product
                   </Text>
                 </>
@@ -1260,25 +1220,50 @@ export function InventoryProductForm({
             <Pressable
               onPress={onDelete}
               disabled={isSubmitting}
-              className="flex-1 items-center justify-center rounded-xl border py-3"
-              style={{ borderColor: colors.ERROR }}
+              style={{
+                flex: 1,
+                height: 52,
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: colors.ERROR,
+                backgroundColor: colors.WHITE,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: isSubmitting ? 0.5 : 1,
+              }}
             >
-              <Text className="font-semibold" style={{ fontSize: button, color: colors.ERROR }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.ERROR }}>
                 Delete Product
               </Text>
             </Pressable>
             <Pressable
               onPress={() => void onSaveProduct()}
               disabled={isSubmitting}
-              className="ml-2 flex-1 flex-row items-center justify-center rounded-xl py-3"
-              style={{ backgroundColor: colors.NAVY }}
+              style={{
+                flex: 1.4,
+                height: 52,
+                borderRadius: 14,
+                backgroundColor: colors.NAVY,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 8,
+                opacity: isSubmitting ? 0.5 : 1,
+              }}
             >
               {isSubmitting ? (
                 <ActivityIndicator color={colors.WHITE} />
               ) : (
                 <>
-                  <Ionicons name="checkmark-circle" size={width * 0.05} color={colors.WHITE} />
-                  <Text className="ml-1 font-semibold" style={{ fontSize: button, color: colors.WHITE }}>
+                  <SaveProductCheckIcon />
+                  <Text
+                    style={{
+                      color: colors.WHITE,
+                      fontSize: 15,
+                      fontWeight: '700',
+                      letterSpacing: 0.2,
+                    }}
+                  >
                     Save Product
                   </Text>
                 </>
@@ -1286,6 +1271,7 @@ export function InventoryProductForm({
             </Pressable>
           </>
         )}
+      </View>
       </View>
     </KeyboardAvoidingView>
   );

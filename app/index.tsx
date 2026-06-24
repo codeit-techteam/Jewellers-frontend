@@ -204,22 +204,21 @@ export default function LandingScreen() {
               <Pressable
                 onPress={handleGetStarted}
                 style={{
-                  backgroundColor: '#1B2B4B',
-                  borderRadius: 14,
+                  backgroundColor: '#C9A84C',
+                  borderRadius: 12,
                   paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  alignItems: 'center',
                   width: '100%',
-                  shadowColor: '#1B2B4B',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.4,
-                  shadowRadius: 8,
-                  elevation: 6,
+                  marginBottom: 12,
                 }}
               >
                 <Text
                   style={{
-                    color: '#FFFFFF',
-                    fontSize: width * 0.042,
-                    fontWeight: '600',
+                    color: '#0D0D0D',
+                    fontSize: 16,
+                    fontWeight: '700',
+                    letterSpacing: 0.5,
                     textAlign: 'center',
                   }}
                 >
@@ -230,20 +229,23 @@ export default function LandingScreen() {
               <Pressable
                 onPress={handleLogin}
                 style={{
-                  backgroundColor: 'rgba(255,255,255,0.10)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.35)',
-                  borderRadius: 14,
+                  backgroundColor: 'transparent',
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: '#C9A84C',
                   paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  alignItems: 'center',
                   width: '100%',
-                  marginTop: 12,
+                  marginBottom: 16,
                 }}
               >
                 <Text
                   style={{
                     color: '#FFFFFF',
-                    fontSize: width * 0.042,
+                    fontSize: 16,
                     fontWeight: '600',
+                    letterSpacing: 0.5,
                     textAlign: 'center',
                   }}
                 >
@@ -253,7 +255,7 @@ export default function LandingScreen() {
 
               <View
                 style={{
-                  marginTop: 14,
+                  marginTop: 8,
                   alignSelf: 'center',
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -263,8 +265,9 @@ export default function LandingScreen() {
                 <Ionicons name="shield-checkmark" size={14} color="#10B981" />
                 <Text
                   style={{
-                    fontSize: width * 0.03,
-                    color: 'rgba(255,255,255,0.75)',
+                    fontSize: 12,
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    textAlign: 'center',
                   }}
                 >
                   Secure OTP-based authentication

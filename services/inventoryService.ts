@@ -1,7 +1,8 @@
 import type { AddProductForm, InventoryProduct, InventoryTrackEvent, MakingChargesType } from '@/types/inventory';
 import { config } from '@constants/config';
-import { calculateProductPrice } from '@utils/calculateProductPrice';
+import { resolveProductPrice } from '@utils/calculateProductPrice';
 import { appendImagesToFormData } from '@utils/createFormData';
+import { normalizeGenderValues, parseStringArrayField } from '@utils/productTagFields';
 import * as SecureStore from 'expo-secure-store';
 
 import { api, ApiError } from './api';
@@ -66,9 +67,11 @@ type BackendProduct = {
   /** Can be an array of URL strings (from products.images jsonb) or image objects. */
   images?: Array<BackendProductImage | string>;
   // ── enrichment fields ────────────────────────────────────────────────────
-  gender?: string | null;
-  occasion?: string | null;
-  style?: string | null;
+  gender?: string[] | string | null;
+  occasion?: string[] | string | null;
+  style?: string[] | string | null;
+  collections?: string[] | null;
+  collection_ids?: string[] | null;
   available_sizes?: string[] | null;
   available_metals?: string[] | null;
   discount_percentage?: number | null;
@@ -141,13 +144,36 @@ function mapProduct(bp: BackendProduct): InventoryProduct {
         }
       : undefined;
 
+  const genderArr = normalizeGenderValues(parseStringArrayField(bp.gender));
+  const occasionArr = parseStringArrayField(bp.occasion);
+  const styleArr = parseStringArrayField(bp.style);
+  const collectionsArr =
+    parseStringArrayField(bp.collections).length > 0
+      ? parseStringArrayField(bp.collections)
+      : bp.collection_name
+        ? [bp.collection_name]
+        : [];
+  const collectionIdsArr = parseStringArrayField(bp.collection_ids);
+
+  // Resolve display price: prefer price_breakup.total, then component sum,
+  // then fall back to products.price (which can be stale on older records).
+  const resolvedPrice = (() => {
+    if (priceBreakup) {
+      if (priceBreakup.total > 0) return priceBreakup.total;
+      const sum =
+        priceBreakup.gold + priceBreakup.gemstone + priceBreakup.makingCharge + priceBreakup.gst;
+      if (sum > 0) return sum;
+    }
+    return bp.price ?? 0;
+  })();
+
   return {
     id: bp.id,
     name: bp.name,
     sku: bp.sku ?? '',
     categoryId,
     category,
-    price: bp.price ?? 0,
+    price: resolvedPrice,
     weight: bp.weight ?? 0,
     purity: bp.purity ?? '',
     makingChargesType: (bp.making_charges_type as MakingChargesType) ?? 'percentage',
@@ -161,15 +187,17 @@ function mapProduct(bp: BackendProduct): InventoryProduct {
     createdAt: bp.created_at ?? new Date().toISOString(),
     additionalDetails: desc,
     description: desc,
-    gender: bp.gender ?? undefined,
-    occasion: bp.occasion ?? undefined,
-    style: bp.style ?? undefined,
+    gender: genderArr.length > 0 ? genderArr : undefined,
+    occasion: occasionArr.length > 0 ? occasionArr : undefined,
+    style: styleArr.length > 0 ? styleArr : undefined,
+    collections: collectionsArr.length > 0 ? collectionsArr : undefined,
+    collectionIds: collectionIdsArr.length > 0 ? collectionIdsArr : undefined,
     availableSizes: bp.available_sizes ?? undefined,
     availableMetals: bp.available_metals ?? undefined,
     discountPercent: bp.discount_percentage ?? undefined,
     priceBreakup,
     specifications,
-    collectionName: bp.collection_name ?? undefined,
+    collectionName: collectionsArr[0] ?? bp.collection_name ?? undefined,
     videoUrl: bp.video_url ?? undefined,
   };
 }
@@ -281,7 +309,12 @@ function getLocalImageUris(data: AddProductForm): string[] {
 }
 
 function buildCreateBody(data: AddProductForm, isDraft: boolean) {
-  const price = calculateProductPrice(data.weight, data.makingChargesType, data.makingChargesValue);
+  const price = resolveProductPrice(
+    data.weight,
+    data.makingChargesType,
+    data.makingChargesValue,
+    data.priceBreakup,
+  );
   return {
     name: data.name,
     categoryId: data.categoryId,
@@ -292,15 +325,16 @@ function buildCreateBody(data: AddProductForm, isDraft: boolean) {
     makingChargesValue: data.makingChargesValue,
     description: data.description ?? data.additionalDetails,
     isDraft,
-    gender: data.gender,
-    occasion: data.occasion,
-    style: data.style,
+    gender: data.gender?.length ? data.gender : undefined,
+    occasion: data.occasion?.length ? data.occasion : undefined,
+    style: data.style?.length ? data.style : undefined,
+    collectionIds: data.collectionIds ?? [],
     availableSizes: data.availableSizes,
     availableMetals: data.availableMetals,
     discountPercent: data.discountPercent,
     priceBreakup: data.priceBreakup,
     specifications: data.specifications,
-    collectionName: data.collectionName,
+    collectionName: data.collections?.[0] ?? data.collectionName,
   };
 }
 
@@ -381,15 +415,31 @@ export async function updateProductApi(
   if (data.isDraft !== undefined) body.isDraft = data.isDraft;
   if (data.price !== undefined) body.price = data.price;
   // ── enrichment fields ──────────────────────────────────────────────────────
-  if (data.gender !== undefined) body.gender = data.gender || null;
-  if (data.occasion !== undefined) body.occasion = data.occasion || null;
-  if (data.style !== undefined) body.style = data.style || null;
+  if (data.gender !== undefined) body.gender = data.gender?.length ? data.gender : [];
+  if (data.occasion !== undefined) body.occasion = data.occasion?.length ? data.occasion : [];
+  if (data.style !== undefined) body.style = data.style?.length ? data.style : [];
+  if (data.collectionIds !== undefined) body.collectionIds = data.collectionIds;
   if (data.availableSizes !== undefined) body.availableSizes = data.availableSizes;
   if (data.availableMetals !== undefined) body.availableMetals = data.availableMetals;
   if (data.discountPercent !== undefined) body.discountPercent = data.discountPercent;
-  if (data.priceBreakup !== undefined) body.priceBreakup = data.priceBreakup;
+  if (data.priceBreakup !== undefined) {
+    body.priceBreakup = data.priceBreakup;
+    // Keep products.price in sync with the price breakup so listing cards and
+    // detail pages always display the same amount.
+    if (body.price === undefined) {
+      const resolvedPrice = resolveProductPrice(
+        data.weight ?? 0,
+        data.makingChargesType ?? 'percentage',
+        data.makingChargesValue ?? 0,
+        data.priceBreakup ?? undefined,
+      );
+      if (resolvedPrice > 0) body.price = resolvedPrice;
+    }
+  }
   if (data.specifications !== undefined) body.specifications = data.specifications;
-  if (data.collectionName !== undefined) body.collectionName = data.collectionName || null;
+  if (data.collectionName !== undefined && data.collectionIds === undefined) {
+    body.collectionName = data.collectionName || null;
+  }
 
   try {
     const { data: updated } = await api.put<BackendProduct>(`/products/${id}`, body);

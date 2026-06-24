@@ -111,7 +111,12 @@ export default function ProductDetailScreen() {
 
   const descText = (product.description || product.additionalDetails)?.trim() ?? '';
 
-  const tagPills = [product.gender, product.occasion, product.style].filter(Boolean) as string[];
+  const tagPills = [
+    ...(product.gender ?? []),
+    ...(product.occasion ?? []),
+    ...(product.style ?? []),
+    ...(product.collections ?? []),
+  ].filter(Boolean);
 
   const specsEntries = product.specifications
     ? ([
@@ -352,7 +357,18 @@ export default function ProductDetailScreen() {
           ) : null}
 
           {/* ── Collection name ── */}
-          {product.collectionName ? (
+          {(product.collections?.length ?? 0) > 0 ? (
+            <View
+              className="mt-3 flex-row items-center rounded-xl px-3 py-2"
+              style={{ backgroundColor: colors.TIP_BG, borderColor: colors.TIP_BORDER, borderWidth: 1 }}
+            >
+              <Ionicons name="layers-outline" size={16} color={colors.NAVY} />
+              <Text className="ml-2" style={{ fontSize: label, color: colors.NAVY }}>
+                Collection:{' '}
+                <Text className="font-semibold">{product.collections!.join(', ')}</Text>
+              </Text>
+            </View>
+          ) : product.collectionName ? (
             <View
               className="mt-3 flex-row items-center rounded-lg px-3 py-2"
               style={{ backgroundColor: colors.TIP_BG, borderColor: colors.TIP_BORDER, borderWidth: 1 }}

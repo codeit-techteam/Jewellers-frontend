@@ -19,7 +19,7 @@ const weightFieldOptional = z
 const baseFields = {
   name: z.string().min(1, 'Product name is required').min(3, 'Minimum 3 characters'),
   categoryId: z.string().uuid('Select a category'),
-  purity: z.string().min(1, 'Select purity'),
+  purity: z.string().optional(),
   makingChargesType: z.enum(['percentage', 'flat']),
   makingChargesValue: z
     .string()
@@ -38,7 +38,6 @@ const baseFields = {
       const n = Number(v);
       return !Number.isNaN(n) && n >= 0 && n <= 100;
     }, 'Enter 0–100'),
-  collectionName: z.string().optional(),
 };
 
 export const inventoryProductStrictSchema = z.object({
@@ -61,17 +60,15 @@ export const inventoryProductDraftSchema = z.object({
   makingChargesValue: z.string().optional(),
   description: z.string().optional(),
   discountPercent: z.string().optional(),
-  collectionName: z.string().optional(),
 });
 
 export type InventoryFormValues = {
   name: string;
   categoryId: string;
   weight: string;
-  purity: string;
+  purity?: string;
   makingChargesType: 'percentage' | 'flat';
   makingChargesValue: string;
   description: string;
   discountPercent: string;
-  collectionName: string;
 };

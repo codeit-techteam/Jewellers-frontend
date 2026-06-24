@@ -8,16 +8,85 @@ export const MOCK_PLAN_RENEWAL_DATE = 'Oct 12, 2024';
 
 export const INVENTORY_DRAFTS_FILTER = 'Drafts' as const;
 
-export const PURITY_OPTIONS = [
-  '14K (58.5%)',
-  '18K (75%)',
-  '22K (91.6%)',
-  '24K (99.9%)',
-  '925 Silver',
+export const PURITY_PRESETS = [
+  '14K',
+  '18K',
+  '22K',
+  '24K',
+  '92.5 Silver',
   '950 Platinum',
 ] as const;
 
-export const DEFAULT_PURITY = '22K (91.6%)';
+/** @deprecated Use PURITY_PRESETS — kept for legacy picker references */
+export const PURITY_OPTIONS = PURITY_PRESETS.map((p) => ({
+  value: p,
+  label: p,
+}));
+
+export const DEFAULT_PURITY = '22K';
+
+export const GENDER_CHIP_OPTIONS = [
+  { label: 'For Her', value: 'female' },
+  { label: 'For Him', value: 'male' },
+  { label: 'Unisex', value: 'unisex' },
+  { label: 'Kids', value: 'kids' },
+] as const;
+
+export const OCCASION_OPTIONS = [
+  'Wedding',
+  'Engagement',
+  'Casual',
+  'Festival',
+  'Daily Wear',
+  'Gift',
+] as const;
+
+export const STYLE_OPTIONS = [
+  'Traditional',
+  'Modern',
+  'Fusion',
+  'Antique',
+  'Minimalist',
+  'Bridal',
+  'Temple',
+  'Kundan',
+  'Polki',
+  'Meenakari',
+  'Western',
+] as const;
+
+export const METAL_OPTIONS = [
+  'Yellow Gold',
+  'White Gold',
+  'Rose Gold',
+  'Silver',
+  'Platinum',
+] as const;
+
+export const CHIP_STYLES = {
+  unselected: {
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: '#555555',
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  selected: {
+    backgroundColor: '#C9A84C',
+    borderWidth: 1.5,
+    borderColor: '#A8872E',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: '#0D0D0D',
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
+};
 
 export const INITIAL_MOCK_INVENTORY_PRODUCTS: InventoryProduct[] = [
   {

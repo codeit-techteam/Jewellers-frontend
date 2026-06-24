@@ -145,9 +145,10 @@ const ProductCard = memo(function ProductCard({
       </Text>
 
       {/* Tags row */}
-      {(product.gender || product.occasion || product.style) ? (
+      {(product.gender?.length || product.occasion?.length || product.style?.length) ? (
         <View className="mt-2 flex-row flex-wrap" style={{ gap: 6 }}>
-          {[product.gender, product.occasion, product.style].filter(Boolean).map((tag) => (
+          {[...(product.gender ?? []), ...(product.occasion ?? []), ...(product.style ?? [])].map(
+            (tag) => (
             <View
               key={tag}
               className="rounded-full px-2 py-1"
@@ -155,7 +156,8 @@ const ProductCard = memo(function ProductCard({
             >
               <Text style={{ fontSize: micro, color: colors.BODY_TEXT }}>{tag}</Text>
             </View>
-          ))}
+          ),
+          )}
         </View>
       ) : null}
 

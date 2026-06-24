@@ -47,14 +47,19 @@ export type InventoryProduct = {
   additionalDetails?: string;
   // ── enrichment fields ───────────────────────────────────────────────────
   description?: string;
-  gender?: string;
-  occasion?: string;
-  style?: string;
+  /** Canonical values: female | male | unisex | kids */
+  gender?: string[];
+  occasion?: string[];
+  style?: string[];
+  collections?: string[];
+  /** CMS collection UUIDs linked via collection_products */
+  collectionIds?: string[];
   availableSizes?: string[];
   availableMetals?: string[];
   discountPercent?: number;
   priceBreakup?: PriceBreakup;
   specifications?: ProductSpecifications;
+  /** @deprecated Use collections[] — first collection label */
   collectionName?: string;
   videoUri?: string;
   videoUrl?: string;
@@ -73,14 +78,18 @@ export type AddProductForm = {
   additionalDetails?: string;
   // ── enrichment fields ───────────────────────────────────────────────────
   description?: string;
-  gender?: string;
-  occasion?: string;
-  style?: string;
+  gender?: string[];
+  occasion?: string[];
+  style?: string[];
+  collections?: string[];
+  /** CMS collection UUIDs linked via collection_products */
+  collectionIds?: string[];
   availableSizes?: string[];
   availableMetals?: string[];
   discountPercent?: number;
   priceBreakup?: PriceBreakup;
   specifications?: ProductSpecifications;
+  /** @deprecated Use collections[] — first collection label */
   collectionName?: string;
   videoUrl?: string;
   videoUri?: string;

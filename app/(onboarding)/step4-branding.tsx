@@ -185,7 +185,7 @@ export default function Step4BrandingScreen() {
       >
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
