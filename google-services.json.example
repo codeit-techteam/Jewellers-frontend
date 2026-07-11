@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "657590289437",
+    "project_id": "gehnahub-6af83",
+    "storage_bucket": "gehnahub-6af83.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:657590289437:android:9b3526895bf1087f0132f4",
+        "android_client_info": {
+          "package_name": "com.jewellars.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "YOUR_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

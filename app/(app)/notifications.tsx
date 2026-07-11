@@ -6,7 +6,10 @@ import {
   getNotifications,
   markAllRead,
   markRead,
+  sendTestPushNotification,
 } from '@services/notificationsService';
+import { syncPushTokenForUser } from '@lib/pushNotifications';
+import { useAuthStore } from '@store/useAuthStore';
 import type { NotificationsResponse } from '@/types/notifications';
 import type { AppNotification } from '@/types/notifications';
 import { handleApiError } from '@utils/handleApiError';
@@ -135,6 +138,8 @@ export default function NotificationsScreen() {
   const storeStatus = useOnboardingStore((state) => state.storeStatus);
 
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('All');
+  const [isTestingPush, setIsTestingPush] = useState(false);
+  const userId = useAuthStore((state) => state.user?.id);
   const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
 
   const apiType = filterTypeForPill(activeFilter);
@@ -219,6 +224,35 @@ export default function NotificationsScreen() {
     }
   };
 
+  const handleTestPush = () => {
+    if (!userId || isTestingPush) return;
+
+    void (async () => {
+      setIsTestingPush(true);
+      try {
+        await syncPushTokenForUser(userId);
+        const result = await sendTestPushNotification({
+          title: 'FCM Test',
+          body: 'If you see this, push notifications are working.',
+        });
+
+        if (result.sent > 0) {
+          await dialog.alert(
+            'Push sent',
+            `${result.message}\nFCM: ${result.fcm} · Expo: ${result.expo}`,
+          );
+          return;
+        }
+
+        await dialog.alert('Push not delivered', result.message);
+      } catch (err) {
+        await dialog.alert('Push test failed', handleApiError(err));
+      } finally {
+        setIsTestingPush(false);
+      }
+    })();
+  };
+
   const closeOtherSwipeables = (openId: string) => {
     swipeableRefs.current.forEach((ref, id) => {
       if (id !== openId) {
@@ -263,10 +297,24 @@ export default function NotificationsScreen() {
         </Pressable>
         <Text
           className="flex-1 text-center font-bold"
-          style={{ fontSize: h2, color: colors.NAVY, marginRight: width * 0.1 }}
+          style={{ fontSize: h2, color: colors.NAVY }}
         >
           Notifications
         </Text>
+        <Pressable
+          onPress={handleTestPush}
+          disabled={isTestingPush}
+          className="h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: colors.SURFACE_MUTED, opacity: isTestingPush ? 0.6 : 1 }}
+          accessibilityRole="button"
+          accessibilityLabel="Send test push notification"
+        >
+          <Ionicons
+            name={isTestingPush ? 'hourglass-outline' : 'notifications-outline'}
+            size={width * 0.05}
+            color={colors.NAVY}
+          />
+        </Pressable>
       </View>
 
       <View style={{ flexGrow: 0, marginTop: 12 }}>

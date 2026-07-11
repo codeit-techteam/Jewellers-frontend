@@ -1,4 +1,5 @@
 import { useRequireOnboardingComplete } from '@hooks/useRequireOnboardingComplete';
+import { usePushNotificationsBootstrap } from '@hooks/usePushNotifications';
 import { useLeadsQuery } from '@hooks/useLeadsQuery';
 import { colors } from '@constants/colors';
 import { countUpcomingLeads, useLeadsStore } from '@store/useLeadsStore';
@@ -9,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AppLayout() {
   useRequireOnboardingComplete();
+  usePushNotificationsBootstrap();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const iconSize = width * 0.055;

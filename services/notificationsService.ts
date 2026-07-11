@@ -104,3 +104,63 @@ export async function deleteNotification(id: string): Promise<void> {
     throw new ApiError('Failed to delete notification');
   }
 }
+
+export async function registerPushToken(input: {
+  token: string;
+  platform?: string;
+  provider?: 'fcm' | 'expo';
+}): Promise<void> {
+  try {
+    await api.post('/notifications/push-token', input);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to register push token');
+  }
+}
+
+export async function sendTestPushNotification(input?: {
+  title?: string;
+  body?: string;
+}): Promise<{
+  sent: number;
+  fcm: number;
+  expo: number;
+  tokenCount: number;
+  message: string;
+  fcmConfigured?: boolean;
+}> {
+  try {
+    const { data } = await api.post<{
+      sent: number;
+      fcm: number;
+      expo: number;
+      tokenCount: number;
+      message: string;
+      fcmConfigured?: boolean;
+    }>('/notifications/push-test', input ?? {});
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to send test push');
+  }
+}
+
+export async function getPushStatus(): Promise<{
+  tokenCount: number;
+  providers: string[];
+  platforms: string[];
+  fcmConfigured: boolean;
+}> {
+  try {
+    const { data } = await api.get<{
+      tokenCount: number;
+      providers: string[];
+      platforms: string[];
+      fcmConfigured: boolean;
+    }>('/notifications/push-status');
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to load push status');
+  }
+}

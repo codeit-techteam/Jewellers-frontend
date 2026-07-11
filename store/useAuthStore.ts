@@ -1,4 +1,5 @@
 import { clearOnboardingMeta, loadOnboardingMeta, saveOnboardingMeta } from '@lib/onboardingMeta';
+import { syncPushTokenForUser } from '@lib/pushNotifications';
 import { clearOtpSession, saveOtpSession } from '@lib/otpSession';
 import { emitAuthReset } from '@lib/authEvents';
 import { clearWelcomeSeen, loadWelcomeSeen, setWelcomeSeen } from '@lib/welcomeMeta';
@@ -132,6 +133,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         setWelcomeSeen(),
         clearOtpSession(),
       ]);
+
+      void syncPushTokenForUser(user.id);
     },
 
     logout: async () => {
@@ -202,6 +205,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           hasSeenWelcome,
           isLoading: false,
         });
+
+        void syncPushTokenForUser(user.id);
       } catch {
         // /auth/me failed (expired/invalid token) — clear everything
         await clearAuthToken();

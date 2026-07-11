@@ -52,7 +52,12 @@ coverage/
 # EAS
 .eas/
 
+# Firebase / FCM credentials (never commit — keep local copies only)
+google-services.json
+google-services*.json
+google-services (*).json
+*-firebase-adminsdk-*.json
+credentials/
+
 # Misc
 *.log
-*.swp
-Thumbs.db
