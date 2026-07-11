@@ -16,6 +16,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://168.144.83.229:5001/api/jeweller",
         "EXPO_PUBLIC_APP_ENV": "production"

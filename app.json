@@ -19,7 +19,6 @@
     },
     "android": {
       "package": "com.jewellars.frontend",
-      "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
